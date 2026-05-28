@@ -1,0 +1,25 @@
+How to feed Rex Trader new knowledge
+=====================================
+
+1. Drop any document into the "inbox" folder:
+   - PDFs (trading books, papers)
+   - Articles saved as .txt or .md
+   - Spreadsheets, charts, screenshots
+   - Anything you want me to consider
+
+2. Open a new Claude conversation and say:
+   "Read what's in Rextrader/knowledge/inbox and propose changes."
+
+3. I'll read every file, then come back with a list of specific,
+   one-line-at-a-time changes I think we should try, with a "why"
+   on each so you can decide yes/no.
+
+4. After we apply (or skip) each idea, I move the source file
+   from "inbox" to "applied" so we know what's been reviewed.
+
+5. Each accepted change is one git commit, so we can roll back
+   any single change if it makes performance worse.
+
+Rule: one change at a time. We need to be able to attribute
+results to specific tweaks. Bundling 5 changes at once means
+we can't tell which one worked or broke things.

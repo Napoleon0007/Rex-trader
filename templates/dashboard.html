@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Crypto Bot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --panel: #14181d;
+      --panel-2: #1a1f25;
+      --border: #242a32;
+      --text: #e8edf2;
+      --muted: #8a96a3;
+      --accent: #5ad1a4;
+      --buy: #4ade80;
+      --sell: #f87171;
+      --hold: #8a96a3;
+      --warn: #fbbf24;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+      font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+    .sub { color: var(--muted); font-size: 12px; margin-bottom: 24px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+    .badge.paper { background: rgba(90, 209, 164, 0.12); color: var(--accent); }
+    .badge.live  { background: rgba(248, 113, 113, 0.12); color: var(--sell); }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .card .label { font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 6px; }
+    .card .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+    .card .delta { font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .delta.pos { color: var(--buy); }
+    .delta.neg { color: var(--sell); }
+    .row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .panel h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em; }
+    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    th, td { padding: 8px 6px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+    th { color: var(--muted); font-weight: 500; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em; }
+    td.num { text-align: right; }
+    .signal { font-weight: 600; }
+    .signal.buy  { color: var(--buy); }
+    .signal.sell { color: var(--sell); }
+    .signal.hold { color: var(--hold); }
+    .empty { color: var(--muted); padding: 24px 0; text-align: center; font-size: 13px; }
+    canvas { width: 100%; height: 240px; display: block; }
+    .footer { margin-top: 24px; color: var(--muted); font-size: 11px; text-align: center; }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent); margin-right: 6px; vertical-align: middle;
+      animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1><span class="dot"></span>Crypto Bot <span id="mode-badge" class="badge paper">PAPER</span></h1>
+    <div class="sub" id="meta">Connecting…</div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="label">Price</div>
+        <div class="value" id="price">—</div>
+        <div class="delta" id="price-symbol"></div>
+      </div>
+      <div class="card">
+        <div class="label">Signal</div>
+        <div class="value signal hold" id="signal">—</div>
+        <div class="delta" id="signal-reason"></div>
+      </div>
+      <div class="card">
+        <div class="label">Equity</div>
+        <div class="value" id="equity">—</div>
+        <div class="delta" id="equity-delta"></div>
+      </div>
+      <div class="card">
+        <div class="label">Position</div>
+        <div class="value" id="position">—</div>
+        <div class="delta" id="cash"></div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="panel">
+        <h2>Price + Moving Averages</h2>
+        <canvas id="chart"></canvas>
+      </div>
+      <div class="panel">
+        <h2>Recent Trades</h2>
+        <div id="trades-wrap">
+          <div class="empty">No trades yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">Auto-refresh every 5s · logs at <code>~/Desktop/crypto_bot/logs/</code></div>
+  </div>
+
+  <script>
+    const fmtUsd = (n) => n == null ? "—" : "$" + Number(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    const fmtPct = (n) => (n >= 0 ? "+" : "") + n.toFixed(2) + "%";
+
+    let startEquity = null;
+
+    async function refresh() {
+      try {
+        const r = await fetch("/api/state");
+        const data = await r.json();
+        render(data);
+      } catch (e) {
+        document.getElementById("meta").textContent = "Bot not running — start it with `python bot.py`.";
+      }
+    }
+
+    function render(data) {
+      const s = data.state;
+      if (!s) {
+        document.getElementById("meta").textContent = "Waiting for first tick…";
+        return;
+      }
+      if (startEquity === null) startEquity = s.equity;
+
+      document.getElementById("meta").textContent =
+        `${s.symbol} · last update ${new Date(s.ts).toLocaleTimeString()}`;
+
+      document.getElementById("price").textContent = fmtUsd(s.price);
+      document.getElementById("price-symbol").textContent = s.symbol;
+
+      const sig = document.getElementById("signal");
+      sig.textContent = s.signal.toUpperCase();
+      sig.className = "value signal " + s.signal;
+      document.getElementById("signal-reason").textContent = s.reason;
+
+      document.getElementById("equity").textContent = fmtUsd(s.equity);
+      const pnl = ((s.equity - startEquity) / startEquity) * 100;
+      const delta = document.getElementById("equity-delta");
+      delta.textContent = "session " + fmtPct(pnl);
+      delta.className = "delta " + (pnl >= 0 ? "pos" : "neg");
+
+      document.getElementById("position").textContent = s.has_position ? "Open" : "Flat";
+      document.getElementById("cash").textContent = "cash " + fmtUsd(s.cash);
+
+      drawChart(data.ticks);
+      renderTrades(data.trades);
+    }
+
+    function renderTrades(trades) {
+      const wrap = document.getElementById("trades-wrap");
+      if (!trades || trades.length === 0) {
+        wrap.innerHTML = '<div class="empty">No trades yet.</div>';
+        return;
+      }
+      let html = '<table><thead><tr><th>Time</th><th>Side</th><th class="num">Price</th></tr></thead><tbody>';
+      for (const t of trades) {
+        const time = new Date(t.ts).toLocaleTimeString();
+        html += `<tr><td>${time}</td><td class="signal ${t.side}">${t.side.toUpperCase()}</td><td class="num">${fmtUsd(t.price)}</td></tr>`;
+      }
+      html += "</tbody></table>";
+      wrap.innerHTML = html;
+    }
+
+    function drawChart(ticks) {
+      const c = document.getElementById("chart");
+      const ctx = c.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      const w = c.clientWidth, h = c.clientHeight;
+      c.width = w * dpr; c.height = h * dpr;
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+
+      if (!ticks || ticks.length < 2) {
+        ctx.fillStyle = "#8a96a3";
+        ctx.font = "13px -apple-system, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Collecting data…", w / 2, h / 2);
+        return;
+      }
+
+      const series = ticks.filter(t => t.price > 0);
+      const prices = series.map(t => t.price);
+      const shortMa = series.map(t => t.short_ma).filter(v => v > 0);
+      const longMa = series.map(t => t.long_ma).filter(v => v > 0);
+      const all = [...prices, ...shortMa, ...longMa];
+      const min = Math.min(...all), max = Math.max(...all);
+      const range = max - min || 1;
+
+      const x = (i, n) => 8 + (i / (n - 1)) * (w - 16);
+      const y = (v) => h - 12 - ((v - min) / range) * (h - 24);
+
+      function line(arr, color, lw) {
+        ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.beginPath();
+        arr.forEach((v, i) => { if (i === 0) ctx.moveTo(x(i, arr.length), y(v)); else ctx.lineTo(x(i, arr.length), y(v)); });
+        ctx.stroke();
+      }
+      line(prices, "#e8edf2", 1.5);
+      line(shortMa, "#5ad1a4", 1.2);
+      line(longMa, "#fbbf24", 1.2);
+    }
+
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>
