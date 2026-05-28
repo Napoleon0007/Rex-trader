@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Crypto Bot</title>
+  <title>Rex Trader</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
@@ -12,104 +12,234 @@
       --border: #242a32;
       --text: #e8edf2;
       --muted: #8a96a3;
+      --dim: #5a6573;
       --accent: #5ad1a4;
       --buy: #4ade80;
       --sell: #f87171;
       --hold: #8a96a3;
       --warn: #fbbf24;
+      --shortMA: #5ad1a4;
+      --longMA:  #fbbf24;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
-      font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
-    .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
-    h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
-    .sub { color: var(--muted); font-size: 12px; margin-bottom: 24px; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
-      font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+    .header { display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+    h1 { font-size: 20px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+    .sub { color: var(--muted); font-size: 12px; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 4px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+      vertical-align: middle; margin-left: 8px; }
     .badge.paper { background: rgba(90, 209, 164, 0.12); color: var(--accent); }
     .badge.live  { background: rgba(248, 113, 113, 0.12); color: var(--sell); }
+    .badge.spot  { background: rgba(138, 150, 163, 0.12); color: var(--muted); margin-left: 4px; }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent); margin-right: 6px; vertical-align: middle;
+      animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    .countdown { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+    .explainer { background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
+      display: flex; align-items: flex-start; gap: 14px; }
+    .explainer .icon { font-size: 22px; line-height: 1; flex-shrink: 0; }
+    .explainer .text { flex: 1; }
+    .explainer h3 { margin: 0 0 4px; font-size: 13px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+    .explainer p { margin: 0; line-height: 1.55; }
+    .explainer strong { color: var(--accent); font-weight: 600; }
+
     .grid { display: grid; gap: 16px; grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; }
     .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
     .card .label { font-size: 11px; color: var(--muted); text-transform: uppercase;
       letter-spacing: 0.06em; margin-bottom: 6px; }
     .card .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-    .card .delta { font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .card .delta { font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; color: var(--muted); }
     .delta.pos { color: var(--buy); }
     .delta.neg { color: var(--sell); }
-    .row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
-    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-    .panel h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; color: var(--muted);
-      text-transform: uppercase; letter-spacing: 0.06em; }
-    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-    th, td { padding: 8px 6px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
-    th { color: var(--muted); font-weight: 500; font-size: 11px;
-      text-transform: uppercase; letter-spacing: 0.06em; }
-    td.num { text-align: right; }
-    .signal { font-weight: 600; }
+    .signal { font-weight: 700; }
     .signal.buy  { color: var(--buy); }
     .signal.sell { color: var(--sell); }
     .signal.hold { color: var(--hold); }
-    .empty { color: var(--muted); padding: 24px 0; text-align: center; font-size: 13px; }
-    canvas { width: 100%; height: 240px; display: block; }
-    .footer { margin-top: 24px; color: var(--muted); font-size: 11px; text-align: center; }
-    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-      background: var(--accent); margin-right: 6px; vertical-align: middle;
-      animation: pulse 2s infinite; }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.35; }
+
+    .row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .panel h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em; display: flex; align-items: center;
+      justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .panel h2 .legend { display: flex; gap: 12px; font-size: 10px; text-transform: none; letter-spacing: 0; }
+    .legend-item { display: flex; align-items: center; gap: 5px; color: var(--muted); font-weight: 500; }
+    .swatch { width: 10px; height: 2px; border-radius: 1px; }
+
+    .strategy-rules { font-size: 12px; line-height: 1.7; color: var(--text); }
+    .rule { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; }
+    .rule-icon { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+    .rule-text { color: var(--muted); }
+    .rule-text b { color: var(--text); font-weight: 600; }
+
+    .ma-gap { margin-top: 12px; padding: 12px; background: var(--bg);
+      border-radius: 8px; border: 1px solid var(--border); }
+    .ma-gap-label { font-size: 11px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    .ma-gap-value { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .ma-gap-bar { height: 6px; background: var(--border); border-radius: 3px;
+      margin-top: 10px; overflow: hidden; position: relative; }
+    .ma-gap-fill { height: 100%; transition: width 0.4s ease; }
+    .ma-gap-fill.above { background: var(--buy); }
+    .ma-gap-fill.below { background: var(--sell); }
+    .ma-gap-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    th, td { padding: 8px 6px; text-align: left; border-bottom: 1px solid var(--border); font-size: 12px; }
+    th { color: var(--muted); font-weight: 500; font-size: 10px;
+      text-transform: uppercase; letter-spacing: 0.06em; }
+    td.num { text-align: right; }
+    .empty { color: var(--muted); padding: 24px 0; text-align: center; font-size: 12px; }
+
+    canvas { width: 100%; height: 280px; display: block; }
+    canvas.equity { height: 160px; }
+
+    .activity { font-size: 12px; max-height: 240px; overflow-y: auto; }
+    .activity .item { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; gap: 10px; }
+    .activity .item:last-child { border-bottom: none; }
+    .activity .time { color: var(--dim); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+    .activity .msg { color: var(--muted); }
+    .activity .msg b { color: var(--text); font-weight: 600; }
+
+    .status-bar { background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 16px; display: flex;
+      justify-content: space-between; flex-wrap: wrap; gap: 12px;
+      font-size: 11px; color: var(--muted); margin-top: 16px; }
+    .status-item { display: flex; gap: 6px; }
+    .status-item b { color: var(--text); font-weight: 500; }
+    .status-ok { color: var(--accent); }
+    .status-warn { color: var(--warn); }
+
+    @media (max-width: 800px) {
+      .grid { grid-template-columns: repeat(2, 1fr); }
+      .row { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1><span class="dot"></span>Crypto Bot <span id="mode-badge" class="badge paper">PAPER</span></h1>
-    <div class="sub" id="meta">Connecting…</div>
+    <div class="header">
+      <div>
+        <h1><span class="dot"></span>Rex Trader
+          <span id="mode-badge" class="badge paper">PAPER</span>
+          <span class="badge spot">SPOT · NO LEVERAGE</span>
+        </h1>
+        <div class="sub" id="meta">Connecting…</div>
+      </div>
+      <div class="countdown" id="countdown">next check in —</div>
+    </div>
+
+    <div class="explainer">
+      <div class="icon">🧠</div>
+      <div class="text">
+        <h3>What's happening right now</h3>
+        <p id="story">Waiting for the first reading from Coinbase…</p>
+      </div>
+    </div>
 
     <div class="grid">
       <div class="card">
-        <div class="label">Price</div>
+        <div class="label">BTC price</div>
         <div class="value" id="price">—</div>
-        <div class="delta" id="price-symbol"></div>
+        <div class="delta" id="price-symbol">BTC-USD · Coinbase</div>
       </div>
       <div class="card">
         <div class="label">Signal</div>
         <div class="value signal hold" id="signal">—</div>
-        <div class="delta" id="signal-reason"></div>
+        <div class="delta" id="signal-reason">—</div>
       </div>
       <div class="card">
-        <div class="label">Equity</div>
+        <div class="label">Equity (fake $)</div>
         <div class="value" id="equity">—</div>
-        <div class="delta" id="equity-delta"></div>
+        <div class="delta" id="equity-delta">since start —</div>
       </div>
       <div class="card">
         <div class="label">Position</div>
         <div class="value" id="position">—</div>
-        <div class="delta" id="cash"></div>
+        <div class="delta" id="cash">cash —</div>
       </div>
     </div>
 
     <div class="row">
       <div class="panel">
-        <h2>Price + Moving Averages</h2>
+        <h2>
+          <span>Price + Moving Averages</span>
+          <span class="legend">
+            <span class="legend-item"><span class="swatch" style="background: #e8edf2;"></span>BTC price</span>
+            <span class="legend-item"><span class="swatch" style="background: var(--shortMA);"></span>9-min MA</span>
+            <span class="legend-item"><span class="swatch" style="background: var(--longMA);"></span>21-min MA</span>
+          </span>
+        </h2>
         <canvas id="chart"></canvas>
       </div>
+
       <div class="panel">
-        <h2>Recent Trades</h2>
-        <div id="trades-wrap">
-          <div class="empty">No trades yet.</div>
+        <h2>How the bot decides</h2>
+        <div class="strategy-rules">
+          <div class="rule">
+            <span class="rule-icon">↑</span>
+            <span class="rule-text">If the <b>9-min MA crosses above the 21-min MA</b> → BUY (use 50% of cash)</span>
+          </div>
+          <div class="rule">
+            <span class="rule-icon">↓</span>
+            <span class="rule-text">If the <b>9-min MA crosses below the 21-min MA</b> → SELL (close position)</span>
+          </div>
+          <div class="rule">
+            <span class="rule-icon">·</span>
+            <span class="rule-text">Otherwise → HOLD (check again in 30 seconds)</span>
+          </div>
+        </div>
+
+        <div class="ma-gap">
+          <div class="ma-gap-label">Short MA vs Long MA</div>
+          <div class="ma-gap-value" id="ma-gap-value">—</div>
+          <div class="ma-gap-bar">
+            <div class="ma-gap-fill" id="ma-gap-fill"></div>
+          </div>
+          <div class="ma-gap-hint" id="ma-gap-hint">How far the two lines are apart. When they cross, a signal fires.</div>
         </div>
       </div>
     </div>
 
-    <div class="footer">Auto-refresh every 5s · logs at <code>~/Desktop/crypto_bot/logs/</code></div>
+    <div class="row">
+      <div class="panel">
+        <h2>Equity over time</h2>
+        <canvas id="equity-chart" class="equity"></canvas>
+      </div>
+      <div class="panel">
+        <h2>Recent activity</h2>
+        <div class="activity" id="activity">
+          <div class="empty">Waiting for activity…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-item">data: <b>Coinbase Exchange · BTC-USD · 1-min bars</b></div>
+      <div class="status-item">bot poll: <b>30s</b></div>
+      <div class="status-item">ticks logged: <b id="tick-count">—</b></div>
+      <div class="status-item">last tick: <b id="last-tick-time">—</b></div>
+      <div class="status-item">status: <b class="status-ok" id="status">live</b></div>
+    </div>
   </div>
 
   <script>
+    const POLL_MS = 5000;
+    const BOT_POLL_S = 30;
+
+    let lastSeenTs = null;
+
     const fmtUsd = (n) => n == null ? "—" : "$" + Number(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
     const fmtPct = (n) => (n >= 0 ? "+" : "") + n.toFixed(2) + "%";
-
-    let startEquity = null;
+    const fmtTime = (iso) => new Date(iso).toLocaleTimeString();
 
     async function refresh() {
       try {
@@ -117,23 +247,23 @@
         const data = await r.json();
         render(data);
       } catch (e) {
-        document.getElementById("meta").textContent = "Bot not running — start it with `python bot.py`.";
+        document.getElementById("meta").textContent = "Cannot reach the bot — connection issue.";
+        document.getElementById("status").textContent = "offline";
+        document.getElementById("status").className = "status-warn";
       }
     }
 
     function render(data) {
       const s = data.state;
       if (!s) {
-        document.getElementById("meta").textContent = "Waiting for first tick…";
+        document.getElementById("meta").textContent = "Bot is starting up — first tick coming in ~30 seconds.";
         return;
       }
-      if (startEquity === null) startEquity = s.equity;
 
       document.getElementById("meta").textContent =
-        `${s.symbol} · last update ${new Date(s.ts).toLocaleTimeString()}`;
+        `${s.symbol} · last update ${fmtTime(s.ts)} · ${data.ticks.length} ticks collected`;
 
       document.getElementById("price").textContent = fmtUsd(s.price);
-      document.getElementById("price-symbol").textContent = s.symbol;
 
       const sig = document.getElementById("signal");
       sig.textContent = s.signal.toUpperCase();
@@ -141,34 +271,112 @@
       document.getElementById("signal-reason").textContent = s.reason;
 
       document.getElementById("equity").textContent = fmtUsd(s.equity);
-      const pnl = ((s.equity - startEquity) / startEquity) * 100;
+      const pnl = ((s.equity - s.starting_cash) / s.starting_cash) * 100;
       const delta = document.getElementById("equity-delta");
-      delta.textContent = "session " + fmtPct(pnl);
+      delta.textContent = "since start " + fmtPct(pnl);
       delta.className = "delta " + (pnl >= 0 ? "pos" : "neg");
 
       document.getElementById("position").textContent = s.has_position ? "Open" : "Flat";
       document.getElementById("cash").textContent = "cash " + fmtUsd(s.cash);
 
-      drawChart(data.ticks);
-      renderTrades(data.trades);
+      renderStory(s, data.ticks, data.trades);
+      renderMaGap(s);
+      drawPriceChart(data.ticks);
+      drawEquityChart(data.ticks);
+      renderActivity(data.ticks, data.trades);
+
+      document.getElementById("tick-count").textContent = data.ticks.length;
+      document.getElementById("last-tick-time").textContent = fmtTime(s.ts);
+      document.getElementById("status").textContent = "live";
+      document.getElementById("status").className = "status-ok";
+      lastSeenTs = s.ts;
     }
 
-    function renderTrades(trades) {
-      const wrap = document.getElementById("trades-wrap");
-      if (!trades || trades.length === 0) {
-        wrap.innerHTML = '<div class="empty">No trades yet.</div>';
+    function renderStory(s, ticks, trades) {
+      if (!s.long_ma) {
+        document.getElementById("story").innerHTML =
+          `Bot is <strong>collecting data</strong> — needs at least 21 minutes of price history before it can calculate the long moving average. Currently ${ticks.length} of ~22 ticks needed.`;
         return;
       }
-      let html = '<table><thead><tr><th>Time</th><th>Side</th><th class="num">Price</th></tr></thead><tbody>';
-      for (const t of trades) {
-        const time = new Date(t.ts).toLocaleTimeString();
-        html += `<tr><td>${time}</td><td class="signal ${t.side}">${t.side.toUpperCase()}</td><td class="num">${fmtUsd(t.price)}</td></tr>`;
+
+      const gap = s.short_ma - s.long_ma;
+      const gapPct = (gap / s.long_ma) * 100;
+      const above = gap > 0;
+
+      let story;
+      if (s.has_position) {
+        story = `Bot is <strong>holding BTC</strong> bought at the last BUY signal. ` +
+          `It will sell when the 9-min MA (${fmtUsd(s.short_ma)}) drops back below the 21-min MA (${fmtUsd(s.long_ma)}). ` +
+          `Right now they're ${fmtPct(gapPct)} apart.`;
+      } else if (above) {
+        story = `Bot is <strong>watching, no position</strong>. The 9-min MA is currently <strong>above</strong> the 21-min MA ` +
+          `(by ${fmtPct(gapPct)}). It missed this leg up — it'll wait for the next crossover. ` +
+          `Trades so far: ${trades.length}.`;
+      } else {
+        story = `Bot is <strong>watching, no position</strong>. The 9-min MA is <strong>${Math.abs(gapPct).toFixed(2)}% below</strong> the 21-min MA — ` +
+          `it needs to rise <strong>${fmtUsd(Math.abs(gap))}</strong> before a BUY fires. ` +
+          `Trades so far: ${trades.length}.`;
       }
-      html += "</tbody></table>";
-      wrap.innerHTML = html;
+      document.getElementById("story").innerHTML = story;
     }
 
-    function drawChart(ticks) {
+    function renderMaGap(s) {
+      if (!s.long_ma) {
+        document.getElementById("ma-gap-value").textContent = "—";
+        document.getElementById("ma-gap-fill").style.width = "0%";
+        document.getElementById("ma-gap-hint").textContent = "Calculating…";
+        return;
+      }
+      const gap = s.short_ma - s.long_ma;
+      const gapPct = (gap / s.long_ma) * 100;
+      const abs = Math.abs(gapPct);
+      document.getElementById("ma-gap-value").textContent =
+        (gap >= 0 ? "+" : "") + fmtUsd(gap) + "  (" + (gap >= 0 ? "+" : "") + gapPct.toFixed(3) + "%)";
+      const fillPct = Math.min(100, (abs / 0.5) * 100);
+      const fill = document.getElementById("ma-gap-fill");
+      fill.style.width = fillPct + "%";
+      fill.className = "ma-gap-fill " + (gap >= 0 ? "above" : "below");
+      document.getElementById("ma-gap-hint").textContent = gap >= 0
+        ? "Short above long. Watching for it to fall through (sell trigger if we own)."
+        : "Short below long. Watching for it to climb above (buy trigger).";
+    }
+
+    function renderActivity(ticks, trades) {
+      const wrap = document.getElementById("activity");
+      const items = [];
+
+      for (const t of trades.slice(0, 10)) {
+        items.push({
+          ts: t.ts,
+          html: `<span class="time">${fmtTime(t.ts)}</span><span class="msg">` +
+            `<b class="signal ${t.side}">${t.side.toUpperCase()}</b> ` +
+            `${(t.qty || 0).toFixed(6)} BTC @ ${fmtUsd(t.price)}` +
+            (t.notional ? ` <span style="color:var(--dim)">· $${t.notional.toFixed(2)}</span>` : "") +
+            `</span>`
+        });
+      }
+
+      let lastSignal = null;
+      for (const tick of ticks.slice(-50)) {
+        if (tick.signal !== "hold" && tick.signal !== lastSignal) {
+          items.push({
+            ts: tick.ts,
+            html: `<span class="time">${fmtTime(tick.ts)}</span><span class="msg">signal: <b class="signal ${tick.signal}">${tick.signal.toUpperCase()}</b> — ${tick.reason}</span>`
+          });
+        }
+        lastSignal = tick.signal;
+      }
+
+      if (items.length === 0) {
+        wrap.innerHTML = '<div class="empty">No trades or signal changes yet. Bot is collecting data and waiting for the MAs to cross.</div>';
+        return;
+      }
+
+      items.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+      wrap.innerHTML = items.slice(0, 12).map(i => `<div class="item">${i.html}</div>`).join("");
+    }
+
+    function drawPriceChart(ticks) {
       const c = document.getElementById("chart");
       const ctx = c.getContext("2d");
       const dpr = window.devicePixelRatio || 1;
@@ -181,7 +389,7 @@
         ctx.fillStyle = "#8a96a3";
         ctx.font = "13px -apple-system, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("Collecting data…", w / 2, h / 2);
+        ctx.fillText("Collecting data… need ~21 minutes for moving averages", w / 2, h / 2);
         return;
       }
 
@@ -193,7 +401,19 @@
       const min = Math.min(...all), max = Math.max(...all);
       const range = max - min || 1;
 
-      const x = (i, n) => 8 + (i / (n - 1)) * (w - 16);
+      ctx.fillStyle = "#5a6573";
+      ctx.font = "10px -apple-system, sans-serif";
+      ctx.textAlign = "right";
+      for (let i = 0; i <= 3; i++) {
+        const v = min + (range * i / 3);
+        const y = h - 12 - (i / 3) * (h - 24);
+        ctx.fillText("$" + Math.round(v).toLocaleString(), w - 6, y + 3);
+        ctx.strokeStyle = "rgba(36, 42, 50, 0.5)";
+        ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(8, y); ctx.lineTo(w - 50, y); ctx.stroke();
+      }
+
+      const x = (i, n) => 8 + (i / (n - 1)) * (w - 60);
       const y = (v) => h - 12 - ((v - min) / range) * (h - 24);
 
       function line(arr, color, lw) {
@@ -202,12 +422,81 @@
         ctx.stroke();
       }
       line(prices, "#e8edf2", 1.5);
-      line(shortMa, "#5ad1a4", 1.2);
-      line(longMa, "#fbbf24", 1.2);
+      line(shortMa, "#5ad1a4", 1.4);
+      line(longMa, "#fbbf24", 1.4);
+    }
+
+    function drawEquityChart(ticks) {
+      const c = document.getElementById("equity-chart");
+      const ctx = c.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      const w = c.clientWidth, h = c.clientHeight;
+      c.width = w * dpr; c.height = h * dpr;
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+
+      if (!ticks || ticks.length < 2) {
+        ctx.fillStyle = "#5a6573";
+        ctx.font = "12px -apple-system, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Equity history will appear as the bot runs", w / 2, h / 2);
+        return;
+      }
+
+      const equity = ticks.map(t => t.equity);
+      const start = ticks[0].starting_cash || equity[0];
+      const min = Math.min(...equity, start) * 0.998;
+      const max = Math.max(...equity, start) * 1.002;
+      const range = max - min || 1;
+
+      const startY = h - 12 - ((start - min) / range) * (h - 24);
+      ctx.strokeStyle = "rgba(138, 150, 163, 0.4)";
+      ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(8, startY); ctx.lineTo(w - 50, startY); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#8a96a3";
+      ctx.font = "10px -apple-system, sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText("start $" + start.toFixed(0), w - 6, startY - 4);
+
+      const x = (i, n) => 8 + (i / (n - 1)) * (w - 60);
+      const y = (v) => h - 12 - ((v - min) / range) * (h - 24);
+
+      const last = equity[equity.length - 1];
+      const up = last >= start;
+
+      ctx.fillStyle = up ? "rgba(74, 222, 128, 0.08)" : "rgba(248, 113, 113, 0.08)";
+      ctx.beginPath();
+      ctx.moveTo(x(0, equity.length), h - 12);
+      equity.forEach((v, i) => ctx.lineTo(x(i, equity.length), y(v)));
+      ctx.lineTo(x(equity.length - 1, equity.length), h - 12);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = up ? "#4ade80" : "#f87171";
+      ctx.lineWidth = 1.8; ctx.beginPath();
+      equity.forEach((v, i) => { if (i === 0) ctx.moveTo(x(i, equity.length), y(v)); else ctx.lineTo(x(i, equity.length), y(v)); });
+      ctx.stroke();
+
+      ctx.fillStyle = up ? "#4ade80" : "#f87171";
+      ctx.font = "11px -apple-system, sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText("$" + last.toFixed(2), w - 6, y(last) - 4);
+    }
+
+    function updateCountdown() {
+      if (!lastSeenTs) {
+        document.getElementById("countdown").textContent = "next check in —";
+        return;
+      }
+      const elapsed = (Date.now() - new Date(lastSeenTs).getTime()) / 1000;
+      const remaining = Math.max(0, BOT_POLL_S - elapsed);
+      document.getElementById("countdown").textContent = `next check in ${Math.ceil(remaining)}s`;
     }
 
     refresh();
-    setInterval(refresh, 5000);
+    setInterval(refresh, POLL_MS);
+    setInterval(updateCountdown, 1000);
   </script>
 </body>
 </html>
