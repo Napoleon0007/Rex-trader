@@ -4,9 +4,9 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
-    # Symbol on Binance public data feed (used for paper-mode prices).
-    # BTCUSDT = Bitcoin priced in US dollars. Other ideas: ETHUSDT, SOLUSDT.
-    symbol: str = "BTCUSDT"
+    # Symbol on Coinbase Exchange public data feed (used for paper-mode prices).
+    # BTC-USD = Bitcoin priced in US dollars. Other ideas: ETH-USD, SOL-USD.
+    symbol: str = "BTC-USD"
 
     # Moving-average crossover parameters (computed on 1-minute bars)
     short_window: int = 9

@@ -1,0 +1,136 @@
+Rex Trader — Project Notes
+===========================
+Created: 2026-05-29
+Owner: Luke Viviers (lukeriding@gmail.com)
+Status: Phase 1 — paper trading (zero risk, fake $100 portfolio)
+
+
+WHAT IT IS
+----------
+A crypto trading bot that watches the live BTC price (from Coinbase Exchange's free
+public feed) and runs a moving-average crossover strategy:
+  - Short MA  =  9 minutes
+  - Long  MA  = 21 minutes
+  - When the short MA crosses ABOVE the long MA → BUY
+  - When the short MA crosses BELOW the long MA → SELL
+
+Paper mode means it does not touch real money. It tracks a fake $100
+portfolio in logs/portfolio.json and pretends to buy/sell at the live price.
+Once we trust the strategy, we wire it to a real exchange (VALR).
+
+
+HOW TO RUN LOCALLY
+------------------
+Two Terminal windows. From ~/Desktop/Rextrader:
+
+  Terminal 1 (the bot):
+    caffeinate -i .venv/bin/python bot.py
+
+  Terminal 2 (the dashboard):
+    .venv/bin/python dashboard.py
+
+Then open http://127.0.0.1:7433 in your browser.
+
+To stop either one: Ctrl+C in its Terminal window.
+
+
+HOW TO RUN ON RAILWAY (24/7)
+----------------------------
+Push to GitHub, then deploy with:
+  cd ~/Desktop/Rextrader
+  RAILWAY_CALLER="skill:use-railway@1.2.1" railway up \
+    --service rex-trader --detach -m "describe what changed"
+
+Live dashboard URL:
+  https://rex-trader-production.up.railway.app
+
+
+THE FOLDERS & FILES
+-------------------
+  bot.py             main trading loop (poll every 30s, decide, log)
+  dashboard.py       Flask web UI on port 7433
+  broker.py          PaperBroker — reads Binance prices, simulates trades
+  strategy.py        the moving-average crossover rules (pure function)
+  config.py          tunable knobs: symbol, MA windows, position size, mode
+  serve.py           Railway entry point (runs bot + dashboard together)
+  requirements.txt   Python dependencies
+  templates/         dashboard HTML
+  knowledge/         drop trading books/articles here for me to read
+    inbox/           new docs go here
+    applied/         I move them here after we've used them
+    HOW_TO_USE.txt   the workflow
+  logs/              gitignored. portfolio.json + trade history live here.
+  .venv/             local Python virtual environment (gitignored)
+  PROJECT_NOTES.txt  this file
+
+
+GITHUB
+------
+  Repo:    https://github.com/Napoleon0007/Rex-trader (private)
+  User:    Napoleon0007
+  gh CLI:  /Users/lukeviviers/bin/gh   (not on $PATH — use the full path)
+
+  To commit and push changes:
+    cd ~/Desktop/Rextrader
+    git add .
+    git -c user.name="Luke Viviers" -c user.email="lukeriding@gmail.com" \
+        commit -m "what changed"
+    git push
+
+
+RAILWAY
+-------
+  Workspace:    napoleon0007's Projects
+  Workspace ID: 1eb142a8-0f91-4c82-be21-a2bdd0330247
+  Project:      rex-trader
+  Project ID:   96d955b8-0b71-4115-a37d-b126f8990481
+  Service:      rex-trader
+  Service ID:   523581d5-ba8b-4ad4-a082-a539623015e9
+  Environment:  production (id 1b60e333-d9bb-408e-a100-71418275d997)
+  Volume:       rex-trader-volume mounted at /app/logs (persists portfolio.json)
+  Domain:       https://rex-trader-production.up.railway.app
+  Port:         7433 (PORT env var set on the service)
+  Dashboard:    https://railway.com/project/96d955b8-0b71-4115-a37d-b126f8990481
+
+
+WHAT'S NEXT (PHASE 2 — REAL MONEY ON VALR)
+------------------------------------------
+Do these in order, only after the paper bot has run for at least 2 weeks
+and the equity curve is positive:
+
+  1. Sign into VALR → Profile → API Keys → Create new key
+  2. Name it "Rex Trader". Tick ONLY: View Balances, View Orders, Place Orders
+     DO NOT TICK Withdraw — keeps the bot from ever moving money out
+  3. Copy the API Key + Secret immediately (Secret only shows once)
+  4. Tell Claude "let's wire VALR" — I'll build broker_valr.py
+  5. Paste keys into a .env file inside Rextrader (gitignored automatically)
+  6. Deposit R400 (~$20) into VALR by EFT
+  7. We test read-only first (read balance, read price) — no buying yet
+  8. Change config.py: mode = "live"
+  9. Run the bot — it now trades BTCZAR with real money
+
+
+THE KNOWLEDGE WORKFLOW
+----------------------
+You make the bot smarter by feeding it documents:
+
+  1. Drop a trading book/article/PDF into  knowledge/inbox/
+  2. Open Claude and say "read inbox and propose changes"
+  3. I read everything, come back with a list of specific one-line-at-a-time
+     changes with a "why" on each
+  4. You pick yes/no per change
+  5. Each accepted change = one git commit (easy to roll back)
+  6. I move the source file from inbox/ to applied/
+
+Rule: ONE strategy change per commit so we can tell what worked or broke.
+
+
+SAFETY RULES
+------------
+  - Paper mode = always safe, no money at risk
+  - When we go live, never enable "Withdraw" permission on the VALR key
+  - Position size capped at 50% of cash per trade
+  - Ctrl+C in the Terminal (or Restart the Railway service) stops it
+    instantly — any open position stays in your VALR account, you can sell
+    manually from VALR's app
+  - Start with R400, not R4000. The first weeks are tuition, not income.

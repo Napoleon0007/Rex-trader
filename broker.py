@@ -16,7 +16,7 @@ import requests
 from config import CONFIG
 
 
-BINANCE_KLINES = "https://api.binance.com/api/v3/klines"
+COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{product}/candles"
 
 
 class PaperBroker:
@@ -40,23 +40,18 @@ class PaperBroker:
         self.state_path.write_text(json.dumps(state, indent=2))
 
     def get_bars(self, symbol: str, limit: int = 100) -> pd.DataFrame:
-        r = requests.get(
-            BINANCE_KLINES,
-            params={"symbol": symbol, "interval": "1m", "limit": limit},
-            timeout=10,
-        )
+        # Coinbase Exchange public candles. Geo-open (works from Railway US),
+        # no auth required, returns 1-minute OHLCV.
+        url = COINBASE_CANDLES.format(product=symbol)
+        r = requests.get(url, params={"granularity": 60}, timeout=10)
         r.raise_for_status()
         rows = r.json()
         if not rows:
             return pd.DataFrame()
-        df = pd.DataFrame(rows, columns=[
-            "open_time", "open", "high", "low", "close", "volume",
-            "close_time", "qav", "trades", "tbb", "tbq", "ignore",
-        ])
-        for col in ("open", "high", "low", "close", "volume"):
-            df[col] = pd.to_numeric(df[col])
-        df["timestamp"] = pd.to_datetime(df["close_time"], unit="ms", utc=True)
-        df = df.set_index("timestamp")
+        df = pd.DataFrame(rows, columns=["time", "low", "high", "open", "close", "volume"])
+        df["timestamp"] = pd.to_datetime(df["time"], unit="s", utc=True)
+        df = df.set_index("timestamp").sort_index()  # Coinbase returns newest-first
+        df = df.tail(limit)
         return df[["open", "high", "low", "close", "volume"]]
 
     def get_position(self, symbol: str):
