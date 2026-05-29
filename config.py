@@ -8,10 +8,14 @@ class Config:
     # BTC-USD = Bitcoin priced in US dollars. Other ideas: ETH-USD, SOL-USD.
     symbol: str = "BTC-USD"
 
-    # Which signal generates entries/exits: "crossover" (EMA trend-following) or
-    # "meanrev" (buy statistical dips, exit on reversion to the mean). Backtesting
-    # showed crossover has no edge on BTC after costs; meanrev is the next test.
-    strategy: str = "meanrev"
+    # Which signal generates entries/exits:
+    #   "crossover" — EMA trend-following (tested: no edge, dead)
+    #   "meanrev"   — buy statistical dips (tested: marginal)
+    #   "tsmom"     — time-series momentum: long when the trailing lookback return
+    #                 is positive, flat when negative. The most robust edge in the
+    #                 literature (Moskowitz; Two Centuries of Trend Following).
+    #                 Designed for daily bars — trades rarely, so costs barely matter.
+    strategy: str = "tsmom"
 
     # EMA crossover parameters (computed on 1-minute bars).
     # EMA spans behave like SMA periods of the same length but weight recent
@@ -37,6 +41,21 @@ class Config:
     regime_filter_enabled: bool = False
     regime_window: int = 50
     regime_er_max: float = 0.30
+
+    # Time-series momentum. mom = trailing return over tsmom_lookback bars. Long
+    # while mom > 0, flat while mom < 0. tsmom_conf_scale is the lookback return
+    # that counts as full-size conviction (0.20 = a +20% trailing move).
+    tsmom_lookback: int = 30
+    tsmom_conf_scale: float = 0.20
+    # Ensemble: instead of betting on one "magic" lookback (which overfits and
+    # broke out-of-sample), average the trend signal across several horizons and
+    # size by the fraction that are positive. Far more robust (Moskowitz uses
+    # multiple horizons). Long when >= enter_frac of horizons are up; exit below
+    # exit_frac.
+    tsmom_ensemble: bool = True
+    tsmom_lookbacks: tuple = (40, 80, 120, 160, 200)
+    tsmom_enter_frac: float = 0.6
+    tsmom_exit_frac: float = 0.4
 
     # How often the bot wakes up and re-evaluates the market (seconds)
     poll_seconds: int = 30
@@ -77,7 +96,10 @@ class Config:
     # trips wins. Set a value to 0 to disable that exit.
 
     # Hard stop-loss: exit if price falls this fraction below the entry price.
-    stop_loss_pct: float = 0.02            # 2%
+    # Off by default — the validated TSMOM strategy exits on the trend turning,
+    # not a fixed stop (backtests showed fixed stops barely triggered and the
+    # ensemble's own exit handles risk).
+    stop_loss_pct: float = 0.0
     # ATR stop: exit if price falls this many ATRs below entry (0 = off).
     atr_stop_mult: float = 0.0
     atr_window: int = 14
@@ -87,14 +109,14 @@ class Config:
     take_profit_pct: float = 0.0
 
     # Trend filter: only take BUYs when price is above a slow EMA (regime = up).
-    # The single biggest defence against crossover whipsaw in choppy markets.
-    trend_filter_enabled: bool = True
+    # Useful for crossover/meanrev; off for TSMOM (its lookbacks ARE the trend).
+    trend_filter_enabled: bool = False
     trend_window: int = 200
     # Also exit an open position if the trend flips down.
     trend_exit: bool = False
 
     # Cooldown: minimum bars to wait after an exit before opening a new position.
-    cooldown_bars: int = 5
+    cooldown_bars: int = 0
 
     # Volatility targeting: scale the position DOWN when recent volatility exceeds
     # this per-bar target (never scales up). 0 = off. Caps risk in turbulent tape.

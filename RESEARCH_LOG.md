@@ -53,16 +53,44 @@ Best observed (15-min, 60d): trend filter ON + reversion exit (z≥+0.5):
 What consistently *helped*: the **trend filter** (buy dips only in uptrends) and
 **deeper z entries** (fewer, higher-quality signals).
 
+### 3. Time-series momentum (TSMOM), daily bars — BEST SO FAR. Risk-managed, not a printer.
+Long while the trailing trend is up, flat otherwise. Tested on 5y daily BTC
+(2021–2026, a full cycle incl. the 2022 −65% bear). This is the current default
+(`config.strategy = "tsmom"`, ensemble on).
+
+**Single lookback** (e.g. 120d): +58% over 5y, maxDD 22% vs B&H's 65%. BUT it
+**failed the strict out-of-sample test** (tuned on 2021–23 → −29% on 2024–26).
+Betting on one "magic" lookback overfits.
+
+**Ensemble** (long when ≥60% of the [40,80,120,160,200]-day horizons are up,
+exit below 40%) — the fix for that instability:
+- Full cycle: **+66% to +111%**, max drawdown **~29–31%** (vs B&H 65%), Sharpe 0.5–0.7.
+- **Out-of-sample (2024–26): −0.5%** — fixed the −29% single-lookback failure
+  (now ~break-even OOS, not bleeding).
+- 2022: **−17% vs −65%** (dodged the bear). 2025: **+9% vs B&H −7%** (positive in a down year).
+
+**Honest verdict:** not a clear OOS edge (≈break-even out-of-sample), but a
+genuine *risk-managed BTC participation overlay* — roughly half the drawdown,
+dodges bear markets, positive over the cycle. Good fit for "win some, don't blow
+up." Caveats: low frequency (7–23 trades in 5y → small sample), and the high-
+threshold configs (0.8/0.4 → +158%) are overfit (only 4 trades) — don't chase them.
+
+**DEPLOYMENT GAP:** TSMOM is a *daily* strategy. The live bot polls 1-min bars
+every 30s. To run it live it must operate on daily closes (resample or fetch
+daily candles, act once/day). Not yet wired — do this before any live run.
+
 ---
 
 ## Leads for next time
-- **Anchor value to something that doesn't chase price** (e.g. VWAP, a fixed
-  longer-horizon mean) so the exit isn't dragged down in trends.
+- **Wire TSMOM for live daily execution** (the deployment gap above) — biggest
+  unblocker if we want to actually run the best strategy we have.
+- **Volatility-target the TSMOM position size** (classic TSMOM scales to constant
+  vol) — usually lifts Sharpe meaningfully without changing the signal.
+- **Validate TSMOM on more assets / more history** to grow the sample (ETH, SOL;
+  or daily data from another source going back to 2015) — 22 trades is thin.
 - **Funding-rate carry** — a structural edge, not a price pattern. Needs aligned
   historical funding wired into the backtester.
-- **Higher timeframe / daily time-series momentum** (Moskowitz) — the opposite end
-  from the 1-min noise trap; proven over years on daily bars.
-- **Multi-coin cross-sectional** mean-reversion or momentum (rank a basket).
+- **Multi-coin cross-sectional** momentum (rank a basket, long the strongest).
 - Consider whether the realistic cost assumptions are too harsh or too soft
   (currently 0.10% fee + vol-scaled slippage per side).
 

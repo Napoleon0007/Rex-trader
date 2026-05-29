@@ -73,6 +73,8 @@ class Features:
     volume_ok: bool
     zscore: float
     er: float          # Kaufman efficiency ratio (ranging vs trending)
+    mom_return: float  # trailing return over tsmom_lookback bars
+    mom_frac: float    # fraction of ensemble horizons trending up (0..1)
 
     @property
     def valid(self) -> bool:
@@ -81,6 +83,7 @@ class Features:
             and not np.isnan(self.short_prev)
             and not np.isnan(self.long_prev)
             and not np.isnan(self.zscore)
+            and not np.isnan(self.mom_return)
         )
 
 
@@ -133,19 +136,24 @@ def build_features_frame(df: pd.DataFrame, cfg) -> pd.DataFrame:
     path = close.diff().abs().rolling(cfg.regime_window).sum()
     er = net_move / path.replace(0.0, np.nan)
 
+    mom_return = close.pct_change(cfg.tsmom_lookback)
+    # Fraction of ensemble horizons whose trailing return is positive (0..1).
+    positives = [(close.pct_change(lb) > 0).astype(float) for lb in cfg.tsmom_lookbacks]
+    mom_frac = sum(positives) / len(positives)
+
     return pd.DataFrame({
         "price": close, "short_ma": short, "long_ma": long,
         "short_prev": short.shift(1), "long_prev": long.shift(1),
         "recent_vol": recent_vol.fillna(0.0), "trend_up": close > trend_ema,
         "atr": atr.fillna(0.0), "rsi": rsi, "volume_ok": volume_ok,
-        "zscore": zscore, "er": er,
+        "zscore": zscore, "er": er, "mom_return": mom_return, "mom_frac": mom_frac,
     })
 
 
 def features_from_window(bars: pd.DataFrame, cfg) -> Features:
     """Latest Features from a trailing window — used live (once per tick)."""
     if bars.empty:
-        return Features(0, 0, 0, np.nan, np.nan, 0, True, 0, 50, True, np.nan, np.nan)
+        return Features(0, 0, 0, np.nan, np.nan, 0, True, 0, 50, True, np.nan, np.nan, np.nan, 0.0)
     row = build_features_frame(bars, cfg).iloc[-1]
     return _row_to_features(row)
 
@@ -156,7 +164,8 @@ def _row_to_features(row) -> Features:
         short_prev=float(row.short_prev), long_prev=float(row.long_prev),
         recent_vol=float(row.recent_vol), trend_up=bool(row.trend_up),
         atr=float(row.atr), rsi=float(row.rsi), volume_ok=bool(row.volume_ok),
-        zscore=float(row.zscore), er=float(row.er),
+        zscore=float(row.zscore), er=float(row.er), mom_return=float(row.mom_return),
+        mom_frac=float(row.mom_frac),
     )
 
 
@@ -165,6 +174,16 @@ def _signals(feat: Features, cfg) -> tuple:
 
     confidence in [0,1] scales position size; entry/exit reasons are for logging.
     """
+    if cfg.strategy == "tsmom":
+        if cfg.tsmom_ensemble:
+            buy = feat.mom_frac >= cfg.tsmom_enter_frac
+            sell = feat.mom_frac < cfg.tsmom_exit_frac
+            conf = feat.mom_frac if buy else 0.0
+            return buy, sell, conf, "ensemble momentum up", "ensemble momentum down"
+        buy = feat.mom_return > 0
+        sell = feat.mom_return < 0
+        conf = max(0.0, min(1.0, feat.mom_return / cfg.tsmom_conf_scale)) if buy else 0.0
+        return buy, sell, conf, "momentum up", "momentum down"
     if cfg.strategy == "meanrev":
         buy = feat.zscore <= -cfg.mr_entry_z
         sell = feat.zscore >= cfg.mr_exit_z

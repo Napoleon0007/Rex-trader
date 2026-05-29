@@ -101,7 +101,8 @@ def main() -> None:
     while True:
         try:
             need = max(CONFIG.long_window * 4, CONFIG.trend_window + 2, CONFIG.atr_window + 2,
-                       CONFIG.mr_window + 2, CONFIG.regime_window + 2)
+                       CONFIG.mr_window + 2, CONFIG.regime_window + 2, CONFIG.tsmom_lookback + 2,
+                       max(CONFIG.tsmom_lookbacks) + 2)
             bars = broker.get_bars(CONFIG.symbol, limit=need)
             price = float(bars["close"].iloc[-1]) if not bars.empty else 0.0
 
