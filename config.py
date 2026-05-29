@@ -25,6 +25,18 @@ class Config:
     mr_window: int = 20
     mr_entry_z: float = 2.0
     mr_exit_z: float = 0.0
+    # MR-appropriate exits (fix the "falling mean books a loss" problem):
+    # take profit at entry + k*ATR, and a time-stop after N bars if it hasn't worked.
+    take_profit_atr: float = 0.0   # 0 = off
+    max_hold_bars: int = 0         # 0 = off
+
+    # Regime filter (mean-reversion only works in ranging markets). Kaufman
+    # efficiency ratio = |net move| / |total path| over regime_window bars:
+    # ~0 = choppy/ranging (good for MR), ~1 = strong trend (bad). Only enter
+    # when ER <= regime_er_max.
+    regime_filter_enabled: bool = False
+    regime_window: int = 50
+    regime_er_max: float = 0.30
 
     # How often the bot wakes up and re-evaluates the market (seconds)
     poll_seconds: int = 30

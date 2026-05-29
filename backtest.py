@@ -24,7 +24,8 @@ LOG_DIR = Path(__file__).parent / "logs"
 
 def window_size(cfg) -> int:
     """Trailing window the engine sees — identical to bot.py's broker.get_bars limit."""
-    return max(cfg.long_window * 4, cfg.trend_window + 2, cfg.atr_window + 2)
+    return max(cfg.long_window * 4, cfg.trend_window + 2, cfg.atr_window + 2,
+              cfg.mr_window + 2, cfg.regime_window + 2)
 
 
 def run_backtest(df: pd.DataFrame, cfg, granularity: int = 60) -> dict:

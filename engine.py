@@ -72,6 +72,7 @@ class Features:
     rsi: float
     volume_ok: bool
     zscore: float
+    er: float          # Kaufman efficiency ratio (ranging vs trending)
 
     @property
     def valid(self) -> bool:
@@ -128,19 +129,23 @@ def build_features_frame(df: pd.DataFrame, cfg) -> pd.DataFrame:
     mr_std = close.rolling(cfg.mr_window).std()
     zscore = (close - mr_mean) / mr_std.replace(0.0, np.nan)
 
+    net_move = (close - close.shift(cfg.regime_window)).abs()
+    path = close.diff().abs().rolling(cfg.regime_window).sum()
+    er = net_move / path.replace(0.0, np.nan)
+
     return pd.DataFrame({
         "price": close, "short_ma": short, "long_ma": long,
         "short_prev": short.shift(1), "long_prev": long.shift(1),
         "recent_vol": recent_vol.fillna(0.0), "trend_up": close > trend_ema,
         "atr": atr.fillna(0.0), "rsi": rsi, "volume_ok": volume_ok,
-        "zscore": zscore,
+        "zscore": zscore, "er": er,
     })
 
 
 def features_from_window(bars: pd.DataFrame, cfg) -> Features:
     """Latest Features from a trailing window — used live (once per tick)."""
     if bars.empty:
-        return Features(0, 0, 0, np.nan, np.nan, 0, True, 0, 50, True, np.nan)
+        return Features(0, 0, 0, np.nan, np.nan, 0, True, 0, 50, True, np.nan, np.nan)
     row = build_features_frame(bars, cfg).iloc[-1]
     return _row_to_features(row)
 
@@ -151,7 +156,7 @@ def _row_to_features(row) -> Features:
         short_prev=float(row.short_prev), long_prev=float(row.long_prev),
         recent_vol=float(row.recent_vol), trend_up=bool(row.trend_up),
         atr=float(row.atr), rsi=float(row.rsi), volume_ok=bool(row.volume_ok),
-        zscore=float(row.zscore),
+        zscore=float(row.zscore), er=float(row.er),
     )
 
 
@@ -205,6 +210,10 @@ def decide(feat: Features, pos: PositionState, cfg, funding_rate=None) -> Decisi
             d.action, d.reason = Action.EXIT, "trailing-stop"
         elif cfg.take_profit_pct > 0 and feat.price >= entry * (1 + cfg.take_profit_pct):
             d.action, d.reason = Action.EXIT, "take-profit"
+        elif cfg.take_profit_atr > 0 and feat.atr > 0 and feat.price >= entry + cfg.take_profit_atr * feat.atr:
+            d.action, d.reason = Action.EXIT, "atr-target"
+        elif cfg.max_hold_bars > 0 and pos.bars_held >= cfg.max_hold_bars:
+            d.action, d.reason = Action.EXIT, "time-stop"
         elif raw_sell:
             d.action, d.reason = Action.EXIT, exit_reason
         elif cfg.trend_exit and cfg.trend_filter_enabled and not feat.trend_up:
@@ -222,6 +231,9 @@ def decide(feat: Features, pos: PositionState, cfg, funding_rate=None) -> Decisi
         return d
     if cfg.trend_filter_enabled and not feat.trend_up:
         d.reason = "skip buy: trend down"
+        return d
+    if cfg.regime_filter_enabled and (np.isnan(feat.er) or feat.er > cfg.regime_er_max):
+        d.reason = "skip buy: trending (not ranging)"
         return d
     if not feat.volume_ok:
         d.reason = "skip buy: low volume"
