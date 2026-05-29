@@ -40,6 +40,13 @@ class Config:
     paper_slippage_bps: float = 2.0
     slippage_vol_mult: float = 0.5
 
+    # Funding-rate filter. Perp funding is the cheapest read on crowd positioning:
+    # extreme positive funding = crowded longs = mean-reversion risk. When enabled,
+    # a BUY signal is suppressed if BTC perp funding is above funding_max (per 8h).
+    # If funding can't be fetched we fail open and trade normally.
+    funding_filter_enabled: bool = True
+    funding_max: float = 0.0005  # 0.05% / 8h ≈ overheated longs
+
     # Mode. Only "paper" is implemented today. "live" comes after VALR signup.
     mode: str = "paper"
 

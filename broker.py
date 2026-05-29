@@ -18,6 +18,32 @@ from config import CONFIG
 
 COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{product}/candles"
 
+# Bybit public linear-perp ticker carries the current funding rate. No auth, and
+# (unlike Binance) it is reachable from Railway's US region.
+BYBIT_TICKERS = "https://api.bybit.com/v5/market/tickers"
+
+
+def fetch_funding_rate(symbol: str = "BTCUSDT", timeout: int = 10):
+    """Current BTC perpetual funding rate as a float (e.g. 0.0001 = 0.01% / 8h).
+
+    Returns None on any failure so callers can fail open — a funding outage must
+    never wedge the trading loop.
+    """
+    try:
+        r = requests.get(
+            BYBIT_TICKERS,
+            params={"category": "linear", "symbol": symbol},
+            timeout=timeout,
+        )
+        r.raise_for_status()
+        rows = r.json().get("result", {}).get("list", [])
+        if not rows:
+            return None
+        rate = rows[0].get("fundingRate")
+        return float(rate) if rate not in (None, "") else None
+    except (requests.RequestException, ValueError, KeyError):
+        return None
+
 
 class PaperBroker:
     """Reads real prices, simulates orders against a local cash + position state."""

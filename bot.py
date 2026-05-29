@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from broker import make_broker
+from broker import fetch_funding_rate, make_broker
 from config import CONFIG
 from strategy import Signal, ma_crossover, position_confidence
 
@@ -90,7 +90,19 @@ def main() -> None:
                 result.signal.value, has_position, account["equity"],
             )
 
-            if result.signal == Signal.BUY:
+            # Only consult funding on a BUY signal (it changes every 8h; no need
+            # to poll it every tick).
+            funding_blocked = False
+            if result.signal == Signal.BUY and CONFIG.funding_filter_enabled:
+                funding = fetch_funding_rate()
+                if funding is not None and funding > CONFIG.funding_max:
+                    funding_blocked = True
+                    log.warning(
+                        "BUY suppressed — funding overheated (%.4f%% > %.4f%% per 8h)",
+                        funding * 100, CONFIG.funding_max * 100,
+                    )
+
+            if result.signal == Signal.BUY and not funding_blocked:
                 confidence = position_confidence(
                     result.short_ma, result.long_ma, result.last_price,
                     recent_vol, CONFIG.confidence_vol_mult,
