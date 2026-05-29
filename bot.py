@@ -27,7 +27,11 @@ log = logging.getLogger("bot")
 
 
 def write_state(state: dict) -> None:
-    STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
+    # Atomic: write to a temp file then rename, so the dashboard never reads a
+    # half-written state.json while the bot is mid-write (both run in serve.py).
+    tmp = STATE_FILE.with_name(STATE_FILE.name + ".tmp")
+    tmp.write_text(json.dumps(state, indent=2, default=str))
+    tmp.replace(STATE_FILE)
 
 
 def append_jsonl(path: Path, record: dict) -> None:
@@ -51,6 +55,16 @@ def main() -> None:
 
             result = ma_crossover(
                 bars, CONFIG.short_window, CONFIG.long_window, has_position,
+            )
+
+            # Recent 1-min return volatility — feeds slippage (and sizing below).
+            rets = bars["close"].pct_change().dropna()
+            recent_vol = (
+                float(rets.tail(CONFIG.long_window).std()) if len(rets) >= 2 else 0.0
+            )
+            slippage_frac = (
+                CONFIG.paper_slippage_bps / 10_000.0
+                + CONFIG.slippage_vol_mult * recent_vol
             )
 
             account = broker.get_account_snapshot(result.last_price)
@@ -79,7 +93,7 @@ def main() -> None:
             if result.signal == Signal.BUY:
                 dollars = account["cash"] * CONFIG.position_fraction
                 if dollars >= 1.0:
-                    trade = broker.buy_notional(dollars, result.last_price)
+                    trade = broker.buy_notional(dollars, result.last_price, slippage_frac)
                     log.warning(
                         "BUY $%.2f @ $%.2f (qty %.6f)",
                         dollars, result.last_price, trade["qty"],
@@ -88,7 +102,7 @@ def main() -> None:
                 else:
                     log.warning("BUY signal but cash too low ($%.2f)", account["cash"])
             elif result.signal == Signal.SELL:
-                trade = broker.sell_position(result.last_price)
+                trade = broker.sell_position(result.last_price, slippage_frac)
                 if trade:
                     log.warning(
                         "SELL %.6f @ $%.2f (proceeds $%.2f)",

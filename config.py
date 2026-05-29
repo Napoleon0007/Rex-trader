@@ -26,6 +26,13 @@ class Config:
     # Simulated trading fee per fill (0.001 = 0.10%, similar to most exchanges)
     paper_fee_rate: float = 0.001
 
+    # Realistic paper slippage. The MEV / front-running literature's core lesson
+    # for a taker is adverse selection: you never fill at the mid. We model a base
+    # slippage (basis points) plus a component that scales with recent volatility.
+    # Buys fill slightly higher, sells slightly lower — keeps the equity curve honest.
+    paper_slippage_bps: float = 2.0
+    slippage_vol_mult: float = 0.5
+
     # Mode. Only "paper" is implemented today. "live" comes after VALR signup.
     mode: str = "paper"
 

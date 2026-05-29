@@ -1,6 +1,6 @@
 """Paper broker.
 
-Reads real BTC prices from Binance's free public API (no auth, no keys).
+Reads real BTC prices from Coinbase Exchange's free public API (no auth, no keys).
 Simulates a portfolio on disk so we can taste the strategy without risking money.
 The interface (get_bars, get_position, buy_notional, sell_position,
 get_account_snapshot) is designed to match a real broker, so bot.py stays
@@ -37,7 +37,11 @@ class PaperBroker:
         return json.loads(self.state_path.read_text())
 
     def _write(self, state: dict) -> None:
-        self.state_path.write_text(json.dumps(state, indent=2))
+        # Atomic: temp file + rename, so the dashboard never reads a half-written
+        # portfolio.json while we're mid-write (bot + dashboard share the process).
+        tmp = self.state_path.with_name(self.state_path.name + ".tmp")
+        tmp.write_text(json.dumps(state, indent=2))
+        tmp.replace(self.state_path)
 
     def get_bars(self, symbol: str, limit: int = 100) -> pd.DataFrame:
         # Coinbase Exchange public candles. Geo-open (works from Railway US),
@@ -74,13 +78,16 @@ class PaperBroker:
             "position_value": position_value,
         }
 
-    def buy_notional(self, dollars: float, price: float) -> dict:
+    def buy_notional(self, dollars: float, price: float, slippage_frac: float = 0.0) -> dict:
         s = self._read()
         if dollars > s["cash"]:
             dollars = s["cash"]
+        # Adverse selection: a market buy fills above the quoted price.
+        fill_price = price * (1 + slippage_frac)
         fee = dollars * self.fee_rate
         spend = dollars - fee
-        qty = spend / price
+        qty = spend / fill_price
+        price = fill_price
         new_qty = s["position_qty"] + qty
         new_avg = (
             (s["position_qty"] * s["position_avg_price"] + qty * price) / new_qty
@@ -99,11 +106,13 @@ class PaperBroker:
             "fee": fee,
         }
 
-    def sell_position(self, price: float) -> dict:
+    def sell_position(self, price: float, slippage_frac: float = 0.0) -> dict:
         s = self._read()
         qty = s["position_qty"]
         if qty <= 0:
             return {}
+        # Adverse selection: a market sell fills below the quoted price.
+        price = price * (1 - slippage_frac)
         gross = qty * price
         fee = gross * self.fee_rate
         proceeds = gross - fee
