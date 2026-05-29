@@ -1,4 +1,4 @@
-"""Main bot loop. Polls market, runs strategy, places trades, logs everything."""
+"""Main bot loop. Polls market, runs the shared engine, places trades, logs."""
 import json
 import logging
 import time
@@ -7,11 +7,12 @@ from pathlib import Path
 
 from broker import fetch_funding_rate, make_broker
 from config import CONFIG
-from strategy import Signal, ma_crossover, position_confidence
+from engine import Action, PositionState, decide, features_from_window, slippage_fraction
 
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 STATE_FILE = LOG_DIR / "state.json"
+POSITION_FILE = LOG_DIR / "position.json"
 TRADES_FILE = LOG_DIR / "trades.jsonl"
 TICKS_FILE = LOG_DIR / "ticks.jsonl"
 
@@ -26,12 +27,27 @@ logging.basicConfig(
 log = logging.getLogger("bot")
 
 
+def _atomic_write(path: Path, text: str) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
+
+
 def write_state(state: dict) -> None:
-    # Atomic: write to a temp file then rename, so the dashboard never reads a
-    # half-written state.json while the bot is mid-write (both run in serve.py).
-    tmp = STATE_FILE.with_name(STATE_FILE.name + ".tmp")
-    tmp.write_text(json.dumps(state, indent=2, default=str))
-    tmp.replace(STATE_FILE)
+    _atomic_write(STATE_FILE, json.dumps(state, indent=2, default=str))
+
+
+def write_position(pos: PositionState) -> None:
+    _atomic_write(POSITION_FILE, json.dumps(pos.__dict__, indent=2, default=str))
+
+
+def load_position() -> PositionState:
+    if POSITION_FILE.exists():
+        try:
+            return PositionState(**json.loads(POSITION_FILE.read_text()))
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return PositionState()
 
 
 def append_jsonl(path: Path, record: dict) -> None:
@@ -39,95 +55,103 @@ def append_jsonl(path: Path, record: dict) -> None:
         f.write(json.dumps(record, default=str) + "\n")
 
 
+class FundingCache:
+    """Caches the perp funding rate; funding only changes every 8h, so we refresh
+    at most every funding_refresh_seconds instead of hammering the API each tick."""
+
+    def __init__(self):
+        self.value = None
+        self.fetched_at = 0.0
+
+    def get(self) -> float | None:
+        if not CONFIG.funding_filter_enabled:
+            return None
+        now = time.time()
+        if now - self.fetched_at >= CONFIG.funding_refresh_seconds:
+            fetched = fetch_funding_rate()
+            if fetched is not None:
+                self.value = fetched
+            self.fetched_at = now
+        return self.value
+
+
+def reconcile(pos: PositionState, broker, symbol: str, price: float) -> None:
+    """Keep engine position state in sync with the broker (source of truth for qty)."""
+    bpos = broker.get_position(symbol)
+    if bpos:
+        pos.qty = bpos["qty"]
+        if pos.entry_price <= 0:
+            pos.entry_price = bpos["avg_price"]
+        if pos.peak_price <= 0:
+            pos.peak_price = max(pos.entry_price, price)
+    elif pos.qty > 0:
+        pos.on_exit()
+
+
 def main() -> None:
     broker = make_broker(LOG_DIR)
+    pos = load_position()
+    funding = FundingCache()
     log.info(
-        "Rex Trader starting | mode=%s | symbol=%s | %d/%d MA | poll=%ds",
-        CONFIG.mode.upper(), CONFIG.symbol,
-        CONFIG.short_window, CONFIG.long_window, CONFIG.poll_seconds,
+        "Rex Trader starting | mode=%s | symbol=%s | %d/%d EMA | trend=%s | poll=%ds",
+        CONFIG.mode.upper(), CONFIG.symbol, CONFIG.short_window, CONFIG.long_window,
+        CONFIG.trend_window if CONFIG.trend_filter_enabled else "off", CONFIG.poll_seconds,
     )
 
     while True:
         try:
-            bars = broker.get_bars(CONFIG.symbol, limit=CONFIG.long_window * 4)
-            position = broker.get_position(CONFIG.symbol)
-            has_position = position is not None
+            need = max(CONFIG.long_window * 4, CONFIG.trend_window + 2, CONFIG.atr_window + 2)
+            bars = broker.get_bars(CONFIG.symbol, limit=need)
+            price = float(bars["close"].iloc[-1]) if not bars.empty else 0.0
 
-            result = ma_crossover(
-                bars, CONFIG.short_window, CONFIG.long_window, has_position,
-            )
+            reconcile(pos, broker, CONFIG.symbol, price)
+            pos.on_bar(price)
+            feat = features_from_window(bars, CONFIG)
+            d = decide(feat, pos, CONFIG, funding_rate=funding.get())
+            slip = slippage_fraction(d.recent_vol, CONFIG)
 
-            # Recent 1-min return volatility — feeds slippage (and sizing below).
-            rets = bars["close"].pct_change().dropna()
-            recent_vol = (
-                float(rets.tail(CONFIG.long_window).std()) if len(rets) >= 2 else 0.0
-            )
-            slippage_frac = (
-                CONFIG.paper_slippage_bps / 10_000.0
-                + CONFIG.slippage_vol_mult * recent_vol
-            )
-
-            account = broker.get_account_snapshot(result.last_price)
-            now = datetime.now(timezone.utc).isoformat()
+            account = broker.get_account_snapshot(d.last_price)
             tick = {
-                "ts": now,
-                "symbol": CONFIG.symbol,
-                "mode": CONFIG.mode,
-                "price": result.last_price,
-                "short_ma": result.short_ma,
-                "long_ma": result.long_ma,
-                "signal": result.signal.value,
-                "reason": result.reason,
-                "has_position": has_position,
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "symbol": CONFIG.symbol, "mode": CONFIG.mode,
+                "price": d.last_price, "short_ma": d.short_ma, "long_ma": d.long_ma,
+                "signal": d.signal, "reason": d.reason, "has_position": pos.has_position,
                 **account,
             }
             append_jsonl(TICKS_FILE, tick)
             write_state(tick)
-
             log.info(
-                "price=%.2f short=%.2f long=%.2f signal=%s pos=%s equity=$%.2f",
-                result.last_price, result.short_ma, result.long_ma,
-                result.signal.value, has_position, account["equity"],
+                "price=%.2f short=%.2f long=%.2f signal=%s action=%s pos=%s equity=$%.2f",
+                d.last_price, d.short_ma, d.long_ma, d.signal, d.action.value,
+                pos.has_position, account["equity"],
             )
 
-            # Only consult funding on a BUY signal (it changes every 8h; no need
-            # to poll it every tick).
-            funding_blocked = False
-            if result.signal == Signal.BUY and CONFIG.funding_filter_enabled:
-                funding = fetch_funding_rate()
-                if funding is not None and funding > CONFIG.funding_max:
-                    funding_blocked = True
-                    log.warning(
-                        "BUY suppressed — funding overheated (%.4f%% > %.4f%% per 8h)",
-                        funding * 100, CONFIG.funding_max * 100,
-                    )
-
-            if result.signal == Signal.BUY and not funding_blocked:
-                confidence = position_confidence(
-                    result.short_ma, result.long_ma, result.last_price,
-                    recent_vol, CONFIG.confidence_vol_mult,
-                )
-                fraction = CONFIG.position_fraction + (
-                    CONFIG.max_position_fraction - CONFIG.position_fraction
-                ) * confidence
-                dollars = account["cash"] * fraction
+            if d.action == Action.ENTER:
+                dollars = account["cash"] * d.fraction
                 if dollars >= 1.0:
-                    trade = broker.buy_notional(dollars, result.last_price, slippage_frac)
+                    trade = broker.buy_notional(dollars, d.last_price, slip)
+                    pos.on_enter(trade["qty"], trade["price"])
                     log.warning(
-                        "BUY $%.2f @ $%.2f (qty %.6f, conf %.2f, frac %.2f)",
-                        dollars, result.last_price, trade["qty"], confidence, fraction,
+                        "BUY $%.2f @ $%.2f (qty %.6f, conf %.2f, frac %.2f) — %s",
+                        dollars, trade["price"], trade["qty"], d.confidence, d.fraction, d.reason,
                     )
-                    append_jsonl(TRADES_FILE, {**trade, "reason": result.reason})
+                    append_jsonl(TRADES_FILE, {**trade, "reason": d.reason})
                 else:
-                    log.warning("BUY signal but cash too low ($%.2f)", account["cash"])
-            elif result.signal == Signal.SELL:
-                trade = broker.sell_position(result.last_price, slippage_frac)
+                    log.warning("ENTER signal but cash too low ($%.2f)", account["cash"])
+            elif d.action == Action.EXIT:
+                entry = pos.entry_price
+                trade = broker.sell_position(d.last_price, slip)
                 if trade:
+                    proceeds = trade["notional"] - trade["fee"]
+                    pnl = proceeds - entry * trade["qty"]
+                    pos.on_exit()
                     log.warning(
-                        "SELL %.6f @ $%.2f (proceeds $%.2f)",
-                        trade["qty"], result.last_price, trade["notional"] - trade["fee"],
+                        "SELL %.6f @ $%.2f (proceeds $%.2f, P&L $%.2f) — %s",
+                        trade["qty"], trade["price"], proceeds, pnl, d.reason,
                     )
-                    append_jsonl(TRADES_FILE, {**trade, "reason": result.reason})
+                    append_jsonl(TRADES_FILE, {**trade, "reason": d.reason, "pnl": pnl})
+
+            write_position(pos)
         except KeyboardInterrupt:
             log.info("Bot stopped by user.")
             break

@@ -46,6 +46,44 @@ class Config:
     # If funding can't be fetched we fail open and trade normally.
     funding_filter_enabled: bool = True
     funding_max: float = 0.0005  # 0.05% / 8h ≈ overheated longs
+    funding_refresh_seconds: int = 900  # re-fetch funding at most every 15 min
+
+    # ---- Risk management (Phase B) ----------------------------------------
+    # All exits are checked every bar while in a position; the first one that
+    # trips wins. Set a value to 0 to disable that exit.
+
+    # Hard stop-loss: exit if price falls this fraction below the entry price.
+    stop_loss_pct: float = 0.02            # 2%
+    # ATR stop: exit if price falls this many ATRs below entry (0 = off).
+    atr_stop_mult: float = 0.0
+    atr_window: int = 14
+    # Trailing stop: exit if price falls this fraction below the peak since entry.
+    trail_stop_pct: float = 0.0
+    # Take-profit: exit if price rises this fraction above entry (0 = off, let it run).
+    take_profit_pct: float = 0.0
+
+    # Trend filter: only take BUYs when price is above a slow EMA (regime = up).
+    # The single biggest defence against crossover whipsaw in choppy markets.
+    trend_filter_enabled: bool = True
+    trend_window: int = 200
+    # Also exit an open position if the trend flips down.
+    trend_exit: bool = False
+
+    # Cooldown: minimum bars to wait after an exit before opening a new position.
+    cooldown_bars: int = 5
+
+    # Volatility targeting: scale the position DOWN when recent volatility exceeds
+    # this per-bar target (never scales up). 0 = off. Caps risk in turbulent tape.
+    vol_target: float = 0.0
+    vol_scale_min: float = 0.25            # never shrink below 25% of intended size
+
+    # ---- Signal confirmation (Phase C) ------------------------------------
+    # Require above-average volume on the entry bar (1.0 = off).
+    volume_mult: float = 0.0
+    volume_window: int = 20
+    # RSI gate: skip BUYs when RSI is above this (overbought). 0/100 = off.
+    rsi_window: int = 14
+    rsi_max: float = 0.0                   # e.g. 70 to avoid buying overbought
 
     # Mode. Only "paper" is implemented today. "live" comes after VALR signup.
     mode: str = "paper"
