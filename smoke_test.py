@@ -1,4 +1,4 @@
-"""Quick check: can we reach Binance and read live BTC prices?"""
+"""Quick check: can we reach Coinbase and read live BTC prices?"""
 from pathlib import Path
 
 from broker import make_broker
@@ -12,7 +12,7 @@ def main():
     print(f"Rex Trader smoke test (mode={CONFIG.mode})")
     broker = make_broker(LOG_DIR)
 
-    print(f"Pulling {CONFIG.symbol} bars from Binance…")
+    print(f"Pulling {CONFIG.symbol} bars from Coinbase…")
     bars = broker.get_bars(CONFIG.symbol, limit=30)
     if bars.empty:
         print("  WARNING: no bars returned")

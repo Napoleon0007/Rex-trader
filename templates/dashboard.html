@@ -296,27 +296,39 @@
         ctx.fillText("$" + Math.round(v).toLocaleString(), w - PAD_R + 6, y + 3);
       }
 
-      // X-axis time labels (start, mid, end)
+      // Time domain: the x-axis represents the FULL selected window (e.g. 1d =
+      // the last 24h), so every point and trade sits at its true time instead of
+      // being stretched evenly across the width by sample index. Data younger
+      // than the window simply leaves blank space on the left.
+      const times = series.map(t => new Date(t.ts).getTime());
+      const tEnd = times[times.length - 1];
+      const tStart = tEnd - windowMins * 60 * 1000;
+      const span = (tEnd - tStart) || 1;
+
+      const x = (ms) => PAD_L + ((ms - tStart) / span) * plotW;
+      const y = (v) => PAD_T + plotH - ((v - min) / range) * plotH;
+
+      // X-axis time labels, evenly spaced across the real time window
       ctx.textAlign = "center";
       ctx.fillStyle = "#5a6573";
-      const tMarks = [0, Math.floor(series.length / 2), series.length - 1];
-      for (const i of tMarks) {
-        const x = PAD_L + (i / Math.max(1, series.length - 1)) * plotW;
-        const t = new Date(series[i].ts);
-        ctx.fillText(t.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}),
-                     x, h - 10);
+      const showDate = windowMins >= 1440;
+      const xMarks = 4;
+      for (let i = 0; i <= xMarks; i++) {
+        const ms = tStart + (span * i) / xMarks;
+        const t = new Date(ms);
+        const label = showDate
+          ? t.toLocaleString([], {weekday: "short", hour: "2-digit", minute: "2-digit"})
+          : t.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+        ctx.fillText(label, PAD_L + (i / xMarks) * plotW, h - 10);
       }
-
-      const x = (i) => PAD_L + (i / Math.max(1, series.length - 1)) * plotW;
-      const y = (v) => PAD_T + plotH - ((v - min) / range) * plotH;
 
       function line(arr, color, lw) {
         ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.beginPath();
         let started = false;
         arr.forEach((v, i) => {
           if (v == null || !isFinite(v) || v <= 0) return;
-          if (!started) { ctx.moveTo(x(i), y(v)); started = true; }
-          else ctx.lineTo(x(i), y(v));
+          if (!started) { ctx.moveTo(x(times[i]), y(v)); started = true; }
+          else ctx.lineTo(x(times[i]), y(v));
         });
         ctx.stroke();
       }
@@ -324,18 +336,12 @@
       line(shortEma, "#ff6b00", 2);
       line(longEma,  "#00d9ff", 2);
 
-      // Buy/sell markers — for each trade, find the closest tick by timestamp
+      // Buy/sell markers placed at their true time within the window.
       if (trades && trades.length) {
-        const tickTimes = series.map(t => new Date(t.ts).getTime());
         for (const tr of trades) {
-          const tt = new Date(tr.ts).getTime();
-          let bestIdx = 0, bestDist = Infinity;
-          for (let i = 0; i < tickTimes.length; i++) {
-            const d = Math.abs(tickTimes[i] - tt);
-            if (d < bestDist) { bestDist = d; bestIdx = i; }
-          }
-          if (bestDist > windowMins * 60 * 1000) continue;
-          const px = x(bestIdx);
+          const tms = new Date(tr.ts).getTime();
+          if (tms < tStart || tms > tEnd) continue;
+          const px = x(tms);
           const py = y(tr.price);
           const color = tr.side === "buy" ? "#4ade80" : "#f87171";
           const label = tr.side === "buy" ? "BUY" : "SELL";
