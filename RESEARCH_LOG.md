@@ -79,6 +79,33 @@ threshold configs (0.8/0.4 → +158%) are overfit (only 4 trades) — don't chas
 every 30s. To run it live it must operate on daily closes (resample or fetch
 daily candles, act once/day). Not yet wired — do this before any live run.
 
+### 4. Cross-asset + cross-sectional momentum — FAILS. The BTC result was luck.
+- **Same ensemble TSMOM on other coins (no re-tuning):** lost on 4 of 5 — ETH −20%,
+  SOL −6% (vs B&H +106%!), DOGE −24%, LTC −67%. Only BTC won. The BTC +111% was
+  asset/period-specific, not a real edge (7 trades = tiny sample).
+- **Cross-sectional portfolio** (rank a 10-coin universe, hold top-K trenders,
+  cash in broad bears), full cycle 2021–2026, every top-K/rebalance combo:
+  negative full-period return (−30% to −80%), max drawdown **81–91%** (worse than
+  the basket), and **every out-of-sample fold negative** (Sharpe −0.2 to −0.8).
+  The absolute filter lags the crash; momentum-picking alts buys tops.
+
+---
+
+## DECISIVE META-CONCLUSION (as of 2026-05-29)
+Four strategy families tested rigorously with realistic costs and out-of-sample
+validation — **EMA crossover, mean-reversion, single-asset TSMOM, cross-sectional
+momentum**. None shows a robust, positive out-of-sample edge on crypto.
+
+The ONLY property that proved robust: **trend-following reduces drawdown** (BTC
+TSMOM: 29% maxDD vs buy&hold's 77%; dodged the 2022 −65% bear). It reliably cut
+risk; it did not reliably add return.
+
+Honest implication: a price-pattern "money-printer" did not emerge, and the
+evidence says one probably isn't there at this complexity. Realistic directions:
+(a) ship a BTC trend-overlay as a *risk-managed hold* (≈beta, far less drawdown —
+honest about what it is), (b) pivot to a non-price edge (funding carry, on-chain,
+sentiment — needs new data, may also fail), or (c) don't run an active bot.
+
 ---
 
 ## Leads for next time
