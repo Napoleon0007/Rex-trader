@@ -49,9 +49,10 @@ THE FOLDERS & FILES
 -------------------
   bot.py             main trading loop (poll every 30s, decide, log)
   dashboard.py       Flask web UI on port 7433
-  broker.py          PaperBroker — reads Binance prices, simulates trades
-  strategy.py        the moving-average crossover rules (pure function)
-  config.py          tunable knobs: symbol, MA windows, position size, mode
+  broker.py          PaperBroker — reads Coinbase prices, simulates trades; funding fetch
+  strategy.py        pure indicators: EMA crossover, ATR, RSI, trend filter, confidence
+  engine.py          SHARED decision logic — bot.py and backtest.py both drive decide()
+  config.py          tunable knobs: windows, sizing, stops, trend/funding filters, mode
   serve.py           Railway entry point (runs bot + dashboard together)
   requirements.txt   Python dependencies
   templates/         dashboard HTML
@@ -60,6 +61,21 @@ THE FOLDERS & FILES
     applied/         I move them here after we've used them
     HOW_TO_USE.txt   the workflow
   logs/              gitignored. portfolio.json + trade history live here.
+  data/              gitignored. cached historical candles for backtests.
+
+THE RESEARCH TOOLBOX (how we make the bot good — never deploy on vibes)
+-----------------------------------------------------------------------
+  data.py        fetches + caches historical Coinbase candles
+  metrics.py     Sharpe, Sortino, max drawdown, win rate, profit factor, expectancy
+  backtest.py    replays history through engine.decide() with real fees + slippage
+                   python backtest.py --days 14 --save
+  walkforward.py finds params in-sample, scores them out-of-sample (anti-overfit)
+                   python walkforward.py --days 30 --folds 5
+  montecarlo.py  bootstraps the trade sequence — distribution of outcomes + risk of ruin
+                   python montecarlo.py --sims 5000
+
+  WORKFLOW: change a rule -> backtest -> walk-forward (OOS must hold up) ->
+            Monte Carlo (survivable drawdown) -> only THEN run it on paper.
   .venv/             local Python virtual environment (gitignored)
   PROJECT_NOTES.txt  this file
 

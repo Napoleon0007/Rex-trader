@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 logs/
+data/
 .venv/
 .DS_Store
 # Knowledge folder is local research material (PDFs etc.), not source code.
