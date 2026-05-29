@@ -7,7 +7,7 @@ from pathlib import Path
 
 from broker import make_broker
 from config import CONFIG
-from strategy import Signal, ma_crossover
+from strategy import Signal, ma_crossover, position_confidence
 
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -91,12 +91,19 @@ def main() -> None:
             )
 
             if result.signal == Signal.BUY:
-                dollars = account["cash"] * CONFIG.position_fraction
+                confidence = position_confidence(
+                    result.short_ma, result.long_ma, result.last_price,
+                    recent_vol, CONFIG.confidence_vol_mult,
+                )
+                fraction = CONFIG.position_fraction + (
+                    CONFIG.max_position_fraction - CONFIG.position_fraction
+                ) * confidence
+                dollars = account["cash"] * fraction
                 if dollars >= 1.0:
                     trade = broker.buy_notional(dollars, result.last_price, slippage_frac)
                     log.warning(
-                        "BUY $%.2f @ $%.2f (qty %.6f)",
-                        dollars, result.last_price, trade["qty"],
+                        "BUY $%.2f @ $%.2f (qty %.6f, conf %.2f, frac %.2f)",
+                        dollars, result.last_price, trade["qty"], confidence, fraction,
                     )
                     append_jsonl(TRADES_FILE, {**trade, "reason": result.reason})
                 else:

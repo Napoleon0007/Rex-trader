@@ -26,6 +26,27 @@ class StrategyResult:
     reason: str
 
 
+def position_confidence(
+    short_ma: float,
+    long_ma: float,
+    last_price: float,
+    recent_vol: float,
+    vol_mult: float,
+) -> float:
+    """Confidence in [0, 1] that the BUY 'view' is strong.
+
+    Black-Litterman blends a neutral prior with a view weighted by conviction.
+    Here conviction is the EMA gap normalised by recent volatility: a gap of
+    `vol_mult` volatility-units counts as full confidence. At a fresh crossover
+    the gap is near zero, so confidence (and size) starts modest and grows when
+    we enter into an already-separating trend.
+    """
+    if last_price <= 0 or recent_vol <= 0 or vol_mult <= 0:
+        return 0.0
+    gap_norm = abs(short_ma - long_ma) / last_price
+    return max(0.0, min(1.0, gap_norm / (vol_mult * recent_vol)))
+
+
 def ma_crossover(
     bars: pd.DataFrame,
     short_window: int,

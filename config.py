@@ -20,8 +20,15 @@ class Config:
     # Paper-portfolio starting cash (US dollars). Real money never touched in paper mode.
     paper_starting_cash: float = 100.00
 
-    # Position sizing: fraction of available cash to spend on a BUY signal
+    # Position sizing. position_fraction is the BASELINE (neutral prior) spent on
+    # a BUY. In the Black-Litterman spirit we blend that prior with the strength
+    # of the "view" — how far the short EMA has separated from the long EMA,
+    # measured in units of recent volatility — scaling up toward max_position_fraction
+    # as confidence rises. confidence_vol_mult sets how many vol-units of EMA gap
+    # count as full confidence.
     position_fraction: float = 0.50
+    max_position_fraction: float = 0.90
+    confidence_vol_mult: float = 3.0
 
     # Simulated trading fee per fill (0.001 = 0.10%, similar to most exchanges)
     paper_fee_rate: float = 0.001
