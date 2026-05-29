@@ -7,16 +7,25 @@ Status: Phase 1 — paper trading (zero risk, fake $100 portfolio)
 
 WHAT IT IS
 ----------
-A crypto trading bot that watches the live BTC price (from Coinbase Exchange's free
-public feed) and runs a moving-average crossover strategy:
-  - Short MA  =  9 minutes
-  - Long  MA  = 21 minutes
-  - When the short MA crosses ABOVE the long MA → BUY
-  - When the short MA crosses BELOW the long MA → SELL
+A crypto trading bot for BTC (price from Coinbase's free public feed). The
+strategy is chosen by config.strategy; the validated default is "tsmom" —
+time-series momentum on DAILY bars:
+  - Look at BTC's trailing return over several horizons (40/80/120/160/200 days)
+  - Go long when a majority of those horizons are trending up
+  - Go to CASH when they're not (this is what dodges bear markets)
 
-Paper mode means it does not touch real money. It tracks a fake $100
-portfolio in logs/portfolio.json and pretends to buy/sell at the live price.
-Once we trust the strategy, we wire it to a real exchange (VALR).
+We arrived at this by testing — see RESEARCH_LOG.md. EMA crossover, mean-
+reversion, and cross-sectional momentum were all tried and rejected (no robust
+out-of-sample edge after costs). TSMOM does NOT beat buy-and-hold on raw return,
+but it cuts max drawdown roughly in half and sat out the 2022 crash — an honest
+"win some, don't blow up" risk overlay, not a money-printer.
+
+Paper mode means it does not touch real money. It tracks a fake $100 portfolio
+in logs/portfolio.json. Once we trust it, we wire a real exchange (VALR).
+
+THE RESEARCH TOOLBOX: backtest.py / walkforward.py / montecarlo.py / portfolio.py
+let us test any idea against real costs with out-of-sample validation. Workflow:
+change rule → backtest → walk-forward (OOS must hold) → Monte Carlo → then paper.
 
 
 HOW TO RUN LOCALLY

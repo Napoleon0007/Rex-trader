@@ -149,16 +149,16 @@
     <div class="chart-wrap">
       <div class="chart-head">
         <div class="timeframes" id="timeframes">
-          <button class="tf" data-mins="5">5m</button>
-          <button class="tf" data-mins="15">15m</button>
-          <button class="tf active" data-mins="30">30m</button>
-          <button class="tf" data-mins="60">1h</button>
-          <button class="tf" data-mins="1440">1d</button>
+          <button class="tf" data-mins="43200">1M</button>
+          <button class="tf active" data-mins="129600">3M</button>
+          <button class="tf" data-mins="259200">6M</button>
+          <button class="tf" data-mins="525600">1Y</button>
+          <button class="tf" data-mins="9999999">ALL</button>
         </div>
         <div class="legend">
           <span class="legend-item"><span class="swatch" style="background: #f4f4f5;"></span>BTC</span>
-          <span class="legend-item"><span class="swatch" style="background: var(--shortEMA);"></span>9-EMA</span>
-          <span class="legend-item"><span class="swatch" style="background: var(--longEMA);"></span>21-EMA</span>
+          <span class="legend-item"><span class="swatch" style="background: var(--shortEMA);"></span>fast EMA</span>
+          <span class="legend-item"><span class="swatch" style="background: var(--longEMA);"></span>slow EMA</span>
           <span class="legend-item"><span class="swatch dot" style="background: var(--buy);"></span>BUY</span>
           <span class="legend-item"><span class="swatch dot" style="background: var(--sell);"></span>SELL</span>
         </div>
@@ -167,7 +167,7 @@
     </div>
 
     <div class="footer">
-      <div>data: <b>Coinbase Exchange · 1-min bars</b> · poll: <b>30s</b></div>
+      <div>strategy: <b id="strategy-name">TSMOM</b> · data: <b>Coinbase · daily bars</b> · <b id="poll-label">hourly</b></div>
       <div>ticks: <b id="tick-count">—</b> · trades: <b id="trade-count">—</b> · last: <b id="last-tick-time">—</b> · <b class="ok" id="status">live</b></div>
     </div>
 
@@ -175,9 +175,9 @@
 
   <script>
     const POLL_MS = 5000;
-    const BOT_POLL_S = 30;
+    let BOT_POLL_S = 3600;   // updated from state.poll_seconds (daily strategy)
     let lastSeenTs = null;
-    let windowMins = 30;       // currently-selected chart timeframe (minutes)
+    let windowMins = 129600;   // currently-selected chart timeframe (minutes); default 3M
     let latestData = null;     // last API payload, for instant re-render on tf change
 
     const fmtUsd = (n) => n == null ? "—" : "$" + Number(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -220,12 +220,22 @@
 
       document.getElementById("price").textContent = fmtUsd(s.price);
 
-      // Signal badge
+      // Trend-strength badge (TSMOM: fraction of momentum horizons trending up)
+      if (s.poll_seconds) BOT_POLL_S = s.poll_seconds;
       const sb = document.getElementById("signal-badge");
-      sb.textContent = s.signal.toUpperCase();
-      sb.className = "badge signal-" + s.signal;
+      if (s.mom_frac != null) {
+        const pct = Math.round(s.mom_frac * 100);
+        sb.textContent = "TREND " + pct + "% UP";
+        sb.className = "badge signal-" + (pct >= 60 ? "buy" : pct < 40 ? "sell" : "hold");
+      } else {
+        sb.textContent = s.signal.toUpperCase();
+        sb.className = "badge signal-" + s.signal;
+      }
 
       // Footer
+      if (s.strategy) document.getElementById("strategy-name").textContent = s.strategy.toUpperCase();
+      if (s.poll_seconds) document.getElementById("poll-label").textContent =
+        s.poll_seconds >= 3600 ? (s.poll_seconds / 3600) + "h checks" : Math.round(s.poll_seconds / 60) + "m checks";
       document.getElementById("tick-count").textContent = data.ticks.length;
       document.getElementById("trade-count").textContent = data.trades.length;
       document.getElementById("last-tick-time").textContent = fmtTime(s.ts);
@@ -263,7 +273,7 @@
         ctx.fillStyle = "#5a6573";
         ctx.font = "14px -apple-system, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("Collecting data… need ~21 minutes for EMAs to settle", w / 2, h / 2);
+        ctx.fillText("Collecting daily history…", w / 2, h / 2);
         return;
       }
 
@@ -375,7 +385,8 @@
       }
       const elapsed = (Date.now() - new Date(lastSeenTs).getTime()) / 1000;
       const remaining = Math.max(0, BOT_POLL_S - elapsed);
-      document.getElementById("countdown").textContent = `next check in ${Math.ceil(remaining)}s`;
+      const txt = remaining >= 90 ? `${Math.ceil(remaining / 60)}m` : `${Math.ceil(remaining)}s`;
+      document.getElementById("countdown").textContent = `next check in ${txt}`;
     }
 
     // Timeframe buttons

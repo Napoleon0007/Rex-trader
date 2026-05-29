@@ -115,9 +115,10 @@ def main() -> None:
             account = broker.get_account_snapshot(d.last_price)
             tick = {
                 "ts": datetime.now(timezone.utc).isoformat(),
-                "symbol": CONFIG.symbol, "mode": CONFIG.mode,
+                "symbol": CONFIG.symbol, "mode": CONFIG.mode, "strategy": CONFIG.strategy,
                 "price": d.last_price, "short_ma": d.short_ma, "long_ma": d.long_ma,
                 "signal": d.signal, "reason": d.reason, "has_position": pos.has_position,
+                "mom_frac": feat.mom_frac, "poll_seconds": CONFIG.poll_seconds,
                 **account,
             }
             append_jsonl(TICKS_FILE, tick)
