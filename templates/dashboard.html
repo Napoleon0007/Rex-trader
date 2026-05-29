@@ -3,22 +3,35 @@
 <head>
   <meta charset="utf-8" />
   <title>Rex Trader</title>
+  <link rel="icon" type="image/png" href="/static/logo.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
-      --bg: #0b0d10;
-      --panel: #14181d;
-      --border: #242a32;
-      --text: #e8edf2;
-      --muted: #8a96a3;
-      --dim: #5a6573;
-      --accent: #5ad1a4;
+      --bg: #000000;
+      --panel: #0a0a0a;
+      --panel-2: #131313;
+      --border: #1f1f1f;
+      --text: #f4f4f5;
+      --muted: #94a3b8;
+      --dim: #525c6b;
+
+      /* Neon orange — Rex brand */
+      --accent: #ff6b00;
+      --accent-bright: #ff8520;
+      --accent-dim: rgba(255, 107, 0, 0.14);
+      --accent-glow: rgba(255, 107, 0, 0.45);
+
+      /* Electric blue — secondary accent */
+      --info: #00d9ff;
+      --info-dim: rgba(0, 217, 255, 0.12);
+
       --buy: #4ade80;
       --sell: #f87171;
-      --hold: #8a96a3;
+      --hold: #94a3b8;
       --warn: #fbbf24;
-      --shortEMA: #5ad1a4;
-      --longEMA:  #fbbf24;
+
+      --shortEMA: #ff6b00;
+      --longEMA:  #00d9ff;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
@@ -33,13 +46,16 @@
     h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
     .badge { display: inline-block; padding: 3px 8px; border-radius: 4px;
       font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-    .badge.paper { background: rgba(90, 209, 164, 0.12); color: var(--accent); }
-    .badge.spot  { background: rgba(138, 150, 163, 0.12); color: var(--muted); }
+    .badge.paper { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(255, 107, 0, 0.3); }
+    .badge.spot  { background: var(--info-dim); color: var(--info); border: 1px solid rgba(0, 217, 255, 0.3); }
     .badge.signal-buy  { background: rgba(74, 222, 128, 0.12); color: var(--buy); }
     .badge.signal-sell { background: rgba(248, 113, 113, 0.12); color: var(--sell); }
     .badge.signal-hold { background: rgba(138, 150, 163, 0.12); color: var(--muted); }
-    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-      background: var(--accent); animation: pulse 2s infinite; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent); box-shadow: 0 0 8px var(--accent-glow);
+      animation: pulse 2s infinite; }
+    .logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
+      box-shadow: 0 0 14px var(--accent-glow); border: 1px solid rgba(255, 107, 0, 0.4); }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
     .countdown { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
@@ -53,7 +69,8 @@
       text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
     .money-value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums;
       letter-spacing: -0.02em; line-height: 1.1; }
-    .money-value.equity { font-size: 40px; }
+    .money-value.equity { font-size: 44px; color: var(--accent);
+      text-shadow: 0 0 18px rgba(255, 107, 0, 0.35); }
     .money-sub { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
     .money-sub.pos { color: var(--buy); }
     .money-sub.neg { color: var(--sell); }
@@ -77,6 +94,10 @@
       gap: 12px; color: var(--dim); font-size: 11px; padding: 0 4px; }
     .footer b { color: var(--muted); font-weight: 500; }
     .footer .ok { color: var(--accent); }
+    .chart-wrap { box-shadow: 0 0 32px rgba(255, 107, 0, 0.04); }
+    h1 { background: linear-gradient(90deg, var(--accent) 0%, var(--info) 100%);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent; }
   </style>
 </head>
 <body>
@@ -84,8 +105,9 @@
 
     <div class="top-bar">
       <div class="brand">
-        <span class="dot"></span>
+        <img src="/static/logo.png" alt="Rex" class="logo" />
         <h1>Rex Trader</h1>
+        <span class="dot"></span>
         <span class="badge paper" id="mode-badge">PAPER</span>
         <span class="badge spot">SPOT · NO LEVERAGE</span>
         <span class="badge signal-hold" id="signal-badge">HOLD</span>
@@ -268,8 +290,8 @@
         ctx.stroke();
       }
       line(prices,  "#e8edf2", 1.5);
-      line(shortEma, "#5ad1a4", 1.6);
-      line(longEma,  "#fbbf24", 1.6);
+      line(shortEma, "#ff6b00", 2);
+      line(longEma,  "#00d9ff", 2);
 
       // Buy/sell markers — for each trade, find the closest tick by timestamp
       if (trades && trades.length) {
