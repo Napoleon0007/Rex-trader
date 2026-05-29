@@ -11,8 +11,61 @@ import pandas as pd
 import requests
 
 COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{product}/candles"
+BYBIT_FUNDING_HISTORY = "https://api.bybit.com/v5/market/funding/history"
 DATA_DIR = Path(__file__).parent / "data"
 MAX_PER_REQUEST = 300
+
+
+def fetch_funding_history(symbol: str = "BTCUSDT", days: float = 1825,
+                          use_cache: bool = True, verbose: bool = True) -> pd.Series:
+    """Historical perp funding rate (per 8h) as a daily-summed Series.
+
+    Bybit returns funding every 8h, newest-first, 200 per request. We page
+    backwards, cache to data/funding_<symbol>.csv, and aggregate to a daily carry
+    (sum of the day's three payments).
+    """
+    DATA_DIR.mkdir(exist_ok=True)
+    cache = DATA_DIR / f"funding_{symbol}.csv"
+    if use_cache and cache.exists():
+        s = pd.read_csv(cache, index_col=0, parse_dates=True)["funding"]
+        s.index = pd.to_datetime(s.index, utc=True)
+        if (pd.Timestamp.now(tz="UTC") - s.index.max()) < pd.Timedelta(days=1):
+            return s
+
+    rows, end_ms = [], int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
+    start_ms = int((pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days)).timestamp() * 1000)
+    reqs = 0
+    while end_ms > start_ms:
+        r = requests.get(BYBIT_FUNDING_HISTORY, params={
+            "category": "linear", "symbol": symbol, "endTime": end_ms, "limit": 200,
+        }, timeout=15)
+        r.raise_for_status()
+        lst = r.json().get("result", {}).get("list", [])
+        if not lst:
+            break
+        rows.extend(lst)
+        oldest = min(int(x["fundingRateTimestamp"]) for x in lst)
+        if oldest >= end_ms:
+            break
+        end_ms = oldest - 1
+        reqs += 1
+        time.sleep(0.2)
+        if verbose and reqs % 10 == 0:
+            print(f"  …funding {reqs} pages")
+
+    if not rows:
+        raise RuntimeError(f"No funding history for {symbol}.")
+    df = pd.DataFrame(rows)
+    df["ts"] = pd.to_datetime(df["fundingRateTimestamp"].astype("int64"), unit="ms", utc=True)
+    df["rate"] = df["fundingRate"].astype(float)
+    df = df.set_index("ts").sort_index()
+    daily = df["rate"].resample("1D").sum()
+    daily.name = "funding"
+    if use_cache:
+        daily.to_csv(cache)
+    if verbose:
+        print(f"  {len(daily)} funding-days  {daily.index.min().date()} → {daily.index.max().date()}")
+    return daily
 
 
 def _cache_path(symbol: str, granularity: int) -> Path:

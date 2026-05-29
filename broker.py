@@ -70,10 +70,12 @@ class PaperBroker:
         tmp.replace(self.state_path)
 
     def get_bars(self, symbol: str, limit: int = 100) -> pd.DataFrame:
-        # Coinbase Exchange public candles. Geo-open (works from Railway US),
-        # no auth required, returns 1-minute OHLCV.
+        # Coinbase Exchange public candles (geo-open, no auth). Granularity is
+        # configurable — the live TSMOM strategy runs on daily bars (86400s). One
+        # request returns up to 300 candles; the last one is the still-forming
+        # current bar, whose close ≈ live price.
         url = COINBASE_CANDLES.format(product=symbol)
-        r = requests.get(url, params={"granularity": 60}, timeout=10)
+        r = requests.get(url, params={"granularity": CONFIG.candle_granularity}, timeout=10)
         r.raise_for_status()
         rows = r.json()
         if not rows:

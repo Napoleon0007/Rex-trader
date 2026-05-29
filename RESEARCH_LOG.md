@@ -89,6 +89,23 @@ daily candles, act once/day). Not yet wired — do this before any live run.
   the basket), and **every out-of-sample fold negative** (Sharpe −0.2 to −0.8).
   The absolute filter lags the crash; momentum-picking alts buys tops.
 
+### 5. Funding-rate as a predictor — WEAK. Not a standalone edge.
+Fetched 5y of Bybit 8h funding (data.fetch_funding_history), aligned daily with
+BTC, bucketed forward returns by funding quintile. Correlation of funding with
+forward returns is ~0 at every horizon (1d −0.00, 7d −0.01, 14d −0.03, 30d −0.08).
+There's a faint contrarian tendency at 30d (most-positive-funding quintile →
+−1.85% median forward; most-negative → +3.5%), but it's noisy and non-monotonic.
+Verdict: keep funding as the existing buy-suppression filter, not a strategy.
+
+---
+
+## DECISION (2026-05-29): ship the BTC daily trend overlay
+The only robust, *mechanical* property found is drawdown reduction via trend-
+following (go to cash when the trend is down). On BTC the return was lucky but the
+risk reduction is structural. So the deliverable is an honest risk-managed BTC
+hold — ~half the drawdown, dodges bears — wired to run LIVE on daily bars
+(config.candle_granularity). Not a market-beater; a "win some, don't blow up" bot.
+
 ---
 
 ## DECISIVE META-CONCLUSION (as of 2026-05-29)

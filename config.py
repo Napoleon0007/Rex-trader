@@ -57,8 +57,15 @@ class Config:
     tsmom_enter_frac: float = 0.6
     tsmom_exit_frac: float = 0.4
 
-    # How often the bot wakes up and re-evaluates the market (seconds)
-    poll_seconds: int = 30
+    # Candle granularity in seconds for the live feed + signal. The validated
+    # strategy (TSMOM ensemble) is a DAILY strategy, so default to 86400. The last
+    # candle is the still-forming current day, whose close tracks the live price.
+    # (60=1m, 300=5m, 900=15m, 3600=1h, 86400=1d.)
+    candle_granularity: int = 86400
+
+    # How often the bot wakes up and re-evaluates the market (seconds). A daily
+    # signal only changes ~once a day, so hourly re-checks are plenty and light.
+    poll_seconds: int = 3600
 
     # Paper-portfolio starting cash (US dollars). Real money never touched in paper mode.
     paper_starting_cash: float = 100.00
