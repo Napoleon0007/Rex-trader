@@ -83,6 +83,14 @@
       margin-bottom: 10px; gap: 12px; flex-wrap: wrap; }
     .chart-title { font-size: 12px; color: var(--muted); font-weight: 600;
       text-transform: uppercase; letter-spacing: 0.06em; }
+    .timeframes { display: flex; gap: 6px; }
+    .tf { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: transparent; color: var(--muted); font-size: 11px;
+      font-weight: 600; letter-spacing: 0.04em; cursor: pointer;
+      transition: all 0.15s ease; font-family: inherit; }
+    .tf:hover { color: var(--text); border-color: var(--accent); }
+    .tf.active { background: var(--accent-dim); color: var(--accent);
+      border-color: rgba(255, 107, 0, 0.5); text-shadow: 0 0 8px var(--accent-glow); }
     .legend { display: flex; gap: 14px; font-size: 11px; }
     .legend-item { display: flex; align-items: center; gap: 6px; color: var(--muted); }
     .swatch { width: 14px; height: 2px; border-radius: 1px; }
@@ -140,11 +148,17 @@
 
     <div class="chart-wrap">
       <div class="chart-head">
-        <span class="chart-title">Price + EMAs · trade markers</span>
+        <div class="timeframes" id="timeframes">
+          <button class="tf" data-mins="5">5m</button>
+          <button class="tf" data-mins="15">15m</button>
+          <button class="tf active" data-mins="30">30m</button>
+          <button class="tf" data-mins="60">1h</button>
+          <button class="tf" data-mins="1440">1d</button>
+        </div>
         <div class="legend">
-          <span class="legend-item"><span class="swatch" style="background: #e8edf2;"></span>BTC price</span>
-          <span class="legend-item"><span class="swatch" style="background: var(--shortEMA);"></span>9-min EMA</span>
-          <span class="legend-item"><span class="swatch" style="background: var(--longEMA);"></span>21-min EMA</span>
+          <span class="legend-item"><span class="swatch" style="background: #f4f4f5;"></span>BTC</span>
+          <span class="legend-item"><span class="swatch" style="background: var(--shortEMA);"></span>9-EMA</span>
+          <span class="legend-item"><span class="swatch" style="background: var(--longEMA);"></span>21-EMA</span>
           <span class="legend-item"><span class="swatch dot" style="background: var(--buy);"></span>BUY</span>
           <span class="legend-item"><span class="swatch dot" style="background: var(--sell);"></span>SELL</span>
         </div>
@@ -163,6 +177,8 @@
     const POLL_MS = 5000;
     const BOT_POLL_S = 30;
     let lastSeenTs = null;
+    let windowMins = 30;       // currently-selected chart timeframe (minutes)
+    let latestData = null;     // last API payload, for instant re-render on tf change
 
     const fmtUsd = (n) => n == null ? "—" : "$" + Number(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
     const fmtPct = (n) => (n >= 0 ? "+" : "") + n.toFixed(2) + "%";
@@ -180,6 +196,7 @@
     }
 
     function render(data) {
+      latestData = data;
       const s = data.state;
       if (!s) {
         document.getElementById("status").textContent = "starting…";
@@ -219,7 +236,21 @@
       drawChart(data.ticks, data.trades);
     }
 
-    function drawChart(ticks, trades) {
+    function filterByWindow(ticks, trades, mins) {
+      if (!ticks || !ticks.length) return { ticks: [], trades: trades || [] };
+      const latest = new Date(ticks[ticks.length - 1].ts).getTime();
+      const cutoff = latest - mins * 60 * 1000;
+      const fticks = ticks.filter(t => new Date(t.ts).getTime() >= cutoff);
+      const ftrades = (trades || []).filter(t => new Date(t.ts).getTime() >= cutoff);
+      return { ticks: fticks, trades: ftrades };
+    }
+
+    function drawChart(allTicks, allTrades) {
+      const { ticks, trades } = filterByWindow(allTicks, allTrades, windowMins);
+      drawChartCore(ticks, trades);
+    }
+
+    function drawChartCore(ticks, trades) {
       const c = document.getElementById("chart");
       const ctx = c.getContext("2d");
       const dpr = window.devicePixelRatio || 1;
@@ -303,8 +334,7 @@
             const d = Math.abs(tickTimes[i] - tt);
             if (d < bestDist) { bestDist = d; bestIdx = i; }
           }
-          // Only show markers that fit in our current time window
-          if (bestDist > 10 * 60 * 1000) continue; // skip markers > 10 min outside window
+          if (bestDist > windowMins * 60 * 1000) continue;
           const px = x(bestIdx);
           const py = y(tr.price);
           const color = tr.side === "buy" ? "#4ade80" : "#f87171";
@@ -342,7 +372,17 @@
       document.getElementById("countdown").textContent = `next check in ${Math.ceil(remaining)}s`;
     }
 
-    window.addEventListener("resize", refresh);
+    // Timeframe buttons
+    document.querySelectorAll(".tf").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tf").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        windowMins = parseInt(btn.dataset.mins, 10);
+        if (latestData) drawChart(latestData.ticks, latestData.trades);
+      });
+    });
+
+    window.addEventListener("resize", () => { if (latestData) drawChart(latestData.ticks, latestData.trades); });
     refresh();
     setInterval(refresh, POLL_MS);
     setInterval(updateCountdown, 1000);

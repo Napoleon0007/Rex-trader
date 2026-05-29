@@ -40,10 +40,11 @@ def index():
 
 @app.route("/api/state")
 def api_state():
+    # 2880 ticks @ 30s = ~24h of history so the dashboard can offer 1d zoom.
     return jsonify({
         "state": read_state(),
-        "trades": list(reversed(read_jsonl(TRADES_FILE, 30))),
-        "ticks": read_jsonl(TICKS_FILE, 240),
+        "trades": list(reversed(read_jsonl(TRADES_FILE, 200))),
+        "ticks": read_jsonl(TICKS_FILE, 2880),
     })
 
 
