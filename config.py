@@ -8,7 +8,9 @@ class Config:
     # BTC-USD = Bitcoin priced in US dollars. Other ideas: ETH-USD, SOL-USD.
     symbol: str = "BTC-USD"
 
-    # Moving-average crossover parameters (computed on 1-minute bars)
+    # EMA crossover parameters (computed on 1-minute bars).
+    # EMA spans behave like SMA periods of the same length but weight recent
+    # prices more — see knowledge/applied/ for the supporting papers.
     short_window: int = 9
     long_window: int = 21
 

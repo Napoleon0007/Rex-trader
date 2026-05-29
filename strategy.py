@@ -1,4 +1,10 @@
-"""Moving-average crossover strategy. Pure function — no I/O."""
+"""EMA crossover strategy. Pure function — no I/O.
+
+EMA (exponential moving average) weights recent prices more heavily than the
+older simple moving average. Every paper in knowledge/applied/ that tests
+crossover strategies on BTC uses EMA, not SMA: faster reaction to real moves,
+less lag at the cost of slightly noisier signals.
+"""
 from dataclasses import dataclass
 from enum import Enum
 
@@ -33,8 +39,8 @@ def ma_crossover(
         )
 
     closes = bars["close"]
-    short_ma = closes.rolling(short_window).mean()
-    long_ma = closes.rolling(long_window).mean()
+    short_ma = closes.ewm(span=short_window, adjust=False).mean()
+    long_ma = closes.ewm(span=long_window, adjust=False).mean()
 
     s_now, s_prev = float(short_ma.iloc[-1]), float(short_ma.iloc[-2])
     l_now, l_prev = float(long_ma.iloc[-1]), float(long_ma.iloc[-2])
@@ -46,11 +52,11 @@ def ma_crossover(
     if crossed_up and not has_position:
         return StrategyResult(
             Signal.BUY, s_now, l_now, last_price,
-            "short MA crossed above long MA",
+            "short EMA crossed above long EMA",
         )
     if crossed_down and has_position:
         return StrategyResult(
             Signal.SELL, s_now, l_now, last_price,
-            "short MA crossed below long MA",
+            "short EMA crossed below long EMA",
         )
     return StrategyResult(Signal.HOLD, s_now, l_now, last_price, "no crossover")

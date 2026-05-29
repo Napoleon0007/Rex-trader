@@ -174,8 +174,8 @@
           <span>Price + Moving Averages</span>
           <span class="legend">
             <span class="legend-item"><span class="swatch" style="background: #e8edf2;"></span>BTC price</span>
-            <span class="legend-item"><span class="swatch" style="background: var(--shortMA);"></span>9-min MA</span>
-            <span class="legend-item"><span class="swatch" style="background: var(--longMA);"></span>21-min MA</span>
+            <span class="legend-item"><span class="swatch" style="background: var(--shortMA);"></span>9-min EMA</span>
+            <span class="legend-item"><span class="swatch" style="background: var(--longMA);"></span>21-min EMA</span>
           </span>
         </h2>
         <canvas id="chart"></canvas>
@@ -186,11 +186,11 @@
         <div class="strategy-rules">
           <div class="rule">
             <span class="rule-icon">↑</span>
-            <span class="rule-text">If the <b>9-min MA crosses above the 21-min MA</b> → BUY (use 50% of cash)</span>
+            <span class="rule-text">If the <b>9-min EMA crosses above the 21-min EMA</b> → BUY (use 50% of cash)</span>
           </div>
           <div class="rule">
             <span class="rule-icon">↓</span>
-            <span class="rule-text">If the <b>9-min MA crosses below the 21-min MA</b> → SELL (close position)</span>
+            <span class="rule-text">If the <b>9-min EMA crosses below the 21-min EMA</b> → SELL (close position)</span>
           </div>
           <div class="rule">
             <span class="rule-icon">·</span>
@@ -199,7 +199,7 @@
         </div>
 
         <div class="ma-gap">
-          <div class="ma-gap-label">Short MA vs Long MA</div>
+          <div class="ma-gap-label">Short EMA vs Long EMA</div>
           <div class="ma-gap-value" id="ma-gap-value">—</div>
           <div class="ma-gap-bar">
             <div class="ma-gap-fill" id="ma-gap-fill"></div>
@@ -306,14 +306,14 @@
       let story;
       if (s.has_position) {
         story = `Bot is <strong>holding BTC</strong> bought at the last BUY signal. ` +
-          `It will sell when the 9-min MA (${fmtUsd(s.short_ma)}) drops back below the 21-min MA (${fmtUsd(s.long_ma)}). ` +
+          `It will sell when the 9-min EMA (${fmtUsd(s.short_ma)}) drops back below the 21-min EMA (${fmtUsd(s.long_ma)}). ` +
           `Right now they're ${fmtPct(gapPct)} apart.`;
       } else if (above) {
-        story = `Bot is <strong>watching, no position</strong>. The 9-min MA is currently <strong>above</strong> the 21-min MA ` +
+        story = `Bot is <strong>watching, no position</strong>. The 9-min EMA is currently <strong>above</strong> the 21-min EMA ` +
           `(by ${fmtPct(gapPct)}). It missed this leg up — it'll wait for the next crossover. ` +
           `Trades so far: ${trades.length}.`;
       } else {
-        story = `Bot is <strong>watching, no position</strong>. The 9-min MA is <strong>${Math.abs(gapPct).toFixed(2)}% below</strong> the 21-min MA — ` +
+        story = `Bot is <strong>watching, no position</strong>. The 9-min EMA is <strong>${Math.abs(gapPct).toFixed(2)}% below</strong> the 21-min EMA — ` +
           `it needs to rise <strong>${fmtUsd(Math.abs(gap))}</strong> before a BUY fires. ` +
           `Trades so far: ${trades.length}.`;
       }
@@ -368,7 +368,7 @@
       }
 
       if (items.length === 0) {
-        wrap.innerHTML = '<div class="empty">No trades or signal changes yet. Bot is collecting data and waiting for the MAs to cross.</div>';
+        wrap.innerHTML = '<div class="empty">No trades or signal changes yet. Bot is collecting data and waiting for the EMAs to cross.</div>';
         return;
       }
 
