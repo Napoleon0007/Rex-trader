@@ -71,6 +71,7 @@ class Features:
     atr: float
     rsi: float
     volume_ok: bool
+    zscore: float
 
     @property
     def valid(self) -> bool:
@@ -78,6 +79,7 @@ class Features:
             self.price > 0
             and not np.isnan(self.short_prev)
             and not np.isnan(self.long_prev)
+            and not np.isnan(self.zscore)
         )
 
 
@@ -122,18 +124,23 @@ def build_features_frame(df: pd.DataFrame, cfg) -> pd.DataFrame:
     else:
         volume_ok = pd.Series(True, index=df.index)
 
+    mr_mean = close.rolling(cfg.mr_window).mean()
+    mr_std = close.rolling(cfg.mr_window).std()
+    zscore = (close - mr_mean) / mr_std.replace(0.0, np.nan)
+
     return pd.DataFrame({
         "price": close, "short_ma": short, "long_ma": long,
         "short_prev": short.shift(1), "long_prev": long.shift(1),
         "recent_vol": recent_vol.fillna(0.0), "trend_up": close > trend_ema,
         "atr": atr.fillna(0.0), "rsi": rsi, "volume_ok": volume_ok,
+        "zscore": zscore,
     })
 
 
 def features_from_window(bars: pd.DataFrame, cfg) -> Features:
     """Latest Features from a trailing window — used live (once per tick)."""
     if bars.empty:
-        return Features(0, 0, 0, np.nan, np.nan, 0, True, 0, 50, True)
+        return Features(0, 0, 0, np.nan, np.nan, 0, True, 0, 50, True, np.nan)
     row = build_features_frame(bars, cfg).iloc[-1]
     return _row_to_features(row)
 
@@ -144,24 +151,41 @@ def _row_to_features(row) -> Features:
         short_prev=float(row.short_prev), long_prev=float(row.long_prev),
         recent_vol=float(row.recent_vol), trend_up=bool(row.trend_up),
         atr=float(row.atr), rsi=float(row.rsi), volume_ok=bool(row.volume_ok),
+        zscore=float(row.zscore),
     )
 
 
-def _entry_fraction(feat: Features, cfg) -> tuple:
+def _signals(feat: Features, cfg) -> tuple:
+    """(raw_buy, raw_sell, confidence, entry_reason, exit_reason) for the active strategy.
+
+    confidence in [0,1] scales position size; entry/exit reasons are for logging.
+    """
+    if cfg.strategy == "meanrev":
+        buy = feat.zscore <= -cfg.mr_entry_z
+        sell = feat.zscore >= cfg.mr_exit_z
+        # Deeper than the entry threshold = more conviction in the bounce.
+        conf = max(0.0, min(1.0, (abs(feat.zscore) - cfg.mr_entry_z) / cfg.mr_entry_z)) if buy else 0.0
+        return buy, sell, conf, "oversold (z<=-%.1f)" % cfg.mr_entry_z, "reverted to mean"
+    # crossover (default trend-following)
+    buy = feat.short_prev <= feat.long_prev and feat.short_ma > feat.long_ma
+    sell = feat.short_prev >= feat.long_prev and feat.short_ma < feat.long_ma
     conf = position_confidence(
         feat.short_ma, feat.long_ma, feat.price, feat.recent_vol, cfg.confidence_vol_mult,
     )
+    return buy, sell, conf, "ema-cross-up", "ema-cross-down"
+
+
+def _blend_fraction(conf: float, feat: Features, cfg) -> float:
     fraction = cfg.position_fraction + (cfg.max_position_fraction - cfg.position_fraction) * conf
     if cfg.vol_target > 0 and feat.recent_vol > 0:
         fraction *= max(cfg.vol_scale_min, min(1.0, cfg.vol_target / feat.recent_vol))
-    return fraction, conf
+    return fraction
 
 
 def decide(feat: Features, pos: PositionState, cfg, funding_rate=None) -> Decision:
     """Decide what to do on one bar. Pure: reads state, mutates nothing."""
-    crossed_up = feat.short_prev <= feat.long_prev and feat.short_ma > feat.long_ma
-    crossed_down = feat.short_prev >= feat.long_prev and feat.short_ma < feat.long_ma
-    signal = "buy" if crossed_up else "sell" if crossed_down else "hold"
+    raw_buy, raw_sell, conf, entry_reason, exit_reason = _signals(feat, cfg)
+    signal = "buy" if raw_buy else "sell" if raw_sell else "hold"
 
     d = Decision(
         action=Action.HOLD, signal=signal, short_ma=feat.short_ma, long_ma=feat.long_ma,
@@ -181,8 +205,8 @@ def decide(feat: Features, pos: PositionState, cfg, funding_rate=None) -> Decisi
             d.action, d.reason = Action.EXIT, "trailing-stop"
         elif cfg.take_profit_pct > 0 and feat.price >= entry * (1 + cfg.take_profit_pct):
             d.action, d.reason = Action.EXIT, "take-profit"
-        elif crossed_down:
-            d.action, d.reason = Action.EXIT, "ema-cross-down"
+        elif raw_sell:
+            d.action, d.reason = Action.EXIT, exit_reason
         elif cfg.trend_exit and cfg.trend_filter_enabled and not feat.trend_up:
             d.action, d.reason = Action.EXIT, "trend-flip"
         else:
@@ -193,8 +217,8 @@ def decide(feat: Features, pos: PositionState, cfg, funding_rate=None) -> Decisi
     if pos.bars_since_exit < cfg.cooldown_bars:
         d.reason = "cooldown"
         return d
-    if not crossed_up:
-        d.reason = "no crossover"
+    if not raw_buy:
+        d.reason = "no entry signal"
         return d
     if cfg.trend_filter_enabled and not feat.trend_up:
         d.reason = "skip buy: trend down"
@@ -209,6 +233,6 @@ def decide(feat: Features, pos: PositionState, cfg, funding_rate=None) -> Decisi
         d.reason = "skip buy: funding overheated"
         return d
 
-    fraction, conf = _entry_fraction(feat, cfg)
-    d.action, d.reason, d.fraction, d.confidence = Action.ENTER, "ema-cross-up", fraction, conf
+    d.action, d.reason = Action.ENTER, entry_reason
+    d.fraction, d.confidence = _blend_fraction(conf, feat, cfg), conf
     return d

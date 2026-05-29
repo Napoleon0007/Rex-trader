@@ -8,11 +8,23 @@ class Config:
     # BTC-USD = Bitcoin priced in US dollars. Other ideas: ETH-USD, SOL-USD.
     symbol: str = "BTC-USD"
 
+    # Which signal generates entries/exits: "crossover" (EMA trend-following) or
+    # "meanrev" (buy statistical dips, exit on reversion to the mean). Backtesting
+    # showed crossover has no edge on BTC after costs; meanrev is the next test.
+    strategy: str = "meanrev"
+
     # EMA crossover parameters (computed on 1-minute bars).
     # EMA spans behave like SMA periods of the same length but weight recent
     # prices more — see knowledge/applied/ for the supporting papers.
     short_window: int = 9
     long_window: int = 21
+
+    # Mean-reversion parameters. z = (price - rolling mean) / rolling std over
+    # mr_window bars. Enter long when z <= -mr_entry_z (statistically cheap),
+    # exit when z >= mr_exit_z (reverted to / above the mean).
+    mr_window: int = 20
+    mr_entry_z: float = 2.0
+    mr_exit_z: float = 0.0
 
     # How often the bot wakes up and re-evaluates the market (seconds)
     poll_seconds: int = 30
